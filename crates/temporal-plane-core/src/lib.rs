@@ -25,6 +25,8 @@
 //! }
 //!
 //! impl StorageBackend for ExampleMemoryStore {
+//!     type Error = CoreError;
+//!
 //!     fn capabilities(&self) -> BackendCapabilities {
 //!         BackendCapabilities::new([
 //!             BackendCapability::Remember,
@@ -36,18 +38,18 @@
 //! }
 //!
 //! impl MemoryRepository for ExampleMemoryStore {
-//!     fn remember(&mut self, record: MemoryRecord) -> Result<MemoryRecord, CoreError> {
+//!     fn remember(&mut self, record: MemoryRecord) -> Result<MemoryRecord, Self::Error> {
 //!         self.records.push(record.clone());
 //!         Ok(record)
 //!     }
 //!
-//!     fn get(&self, id: &MemoryId) -> Result<Option<MemoryRecord>, CoreError> {
+//!     fn get(&self, id: &MemoryId) -> Result<Option<MemoryRecord>, Self::Error> {
 //!         Ok(self.records.iter().find(|record| record.id() == id).cloned())
 //!     }
 //! }
 //!
 //! impl RecallBackend for ExampleMemoryStore {
-//!     fn recall(&self, query: &RecallQuery) -> Result<Vec<MemoryRecord>, CoreError> {
+//!     fn recall(&self, query: &RecallQuery) -> Result<Vec<MemoryRecord>, Self::Error> {
 //!         let mut matches: Vec<_> = self
 //!             .records
 //!             .iter()
@@ -61,7 +63,7 @@
 //!         Ok(matches)
 //!     }
 //!
-//!     fn search(&self, query: &SearchQuery) -> Result<Vec<MemoryRecord>, CoreError> {
+//!     fn search(&self, query: &SearchQuery) -> Result<Vec<MemoryRecord>, Self::Error> {
 //!         let mut matches: Vec<_> = self
 //!             .records
 //!             .iter()
@@ -77,13 +79,13 @@
 //! }
 //!
 //! impl HistoryBackend for ExampleMemoryStore {
-//!     fn history(&self, _query: &HistoryQuery) -> Result<Vec<temporal_plane_core::VersionRecord>, CoreError> {
+//!     fn history(&self, _query: &HistoryQuery) -> Result<Vec<temporal_plane_core::VersionRecord>, Self::Error> {
 //!         Ok(Vec::new())
 //!     }
 //! }
 //!
 //! impl CheckpointBackend for ExampleMemoryStore {
-//!     fn checkpoint(&mut self, request: &CheckpointRequest) -> Result<Checkpoint, CoreError> {
+//!     fn checkpoint(&mut self, request: &CheckpointRequest) -> Result<Checkpoint, Self::Error> {
 //!         let checkpoint = Checkpoint::new(
 //!             request.name().clone(),
 //!             VersionNumber::new(self.records.len() as u64),
@@ -93,13 +95,13 @@
 //!         Ok(checkpoint)
 //!     }
 //!
-//!     fn list_checkpoints(&self) -> Result<Vec<Checkpoint>, CoreError> {
+//!     fn list_checkpoints(&self) -> Result<Vec<Checkpoint>, Self::Error> {
 //!         Ok(self.checkpoints.clone())
 //!     }
 //! }
 //!
 //! impl StatsBackend for ExampleMemoryStore {
-//!     fn stats(&self, query: &StatsQuery) -> Result<temporal_plane_core::StatsSnapshot, CoreError> {
+//!     fn stats(&self, query: &StatsQuery) -> Result<temporal_plane_core::StatsSnapshot, Self::Error> {
 //!         let pinned = self.records.iter().filter(|record| record.pin_state().is_pinned()).count() as u64;
 //!         Ok(temporal_plane_core::StatsSnapshot::new(
 //!             self.records.len() as u64,
@@ -120,8 +122,8 @@
 //! .title("Milestone 1 contract")?
 //! .summary("Freeze the storage-agnostic domain contract")?
 //! .detail("Typed IDs, queries, checkpoints, retention, and traits live in core.")?
-//! .importance(Importance::new(90))
-//! .confidence(Confidence::new(95))
+//! .importance(Importance::new(90)?)
+//! .confidence(Confidence::new(95)?)
 //! .add_tag(TagName::try_from("milestone-1")?)
 //! .metadata(BTreeMap::from([("owner".to_string(), "core".to_string())]))
 //! .build()?;

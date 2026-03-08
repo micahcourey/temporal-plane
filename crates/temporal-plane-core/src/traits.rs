@@ -3,8 +3,8 @@
 use std::collections::BTreeSet;
 
 use crate::{
-    Checkpoint, CheckpointRequest, CoreError, HistoryQuery, MemoryId, MemoryRecord, RecallQuery,
-    SearchQuery, StatsQuery, StatsSnapshot, VersionRecord,
+    Checkpoint, CheckpointRequest, HistoryQuery, MemoryId, MemoryRecord, RecallQuery, SearchQuery,
+    StatsQuery, StatsSnapshot, VersionRecord,
 };
 
 /// An individually advertised backend capability.
@@ -58,6 +58,9 @@ impl BackendCapabilities {
 
 /// Base trait for storage backends used by Temporal Plane.
 pub trait StorageBackend {
+    /// Backend-specific operational error type.
+    type Error;
+
     /// Describes the product capabilities exposed by the backend.
     fn capabilities(&self) -> BackendCapabilities;
 }
@@ -68,15 +71,17 @@ pub trait MemoryRepository: StorageBackend {
     ///
     /// # Errors
     ///
-    /// Returns [`CoreError`] when the backend cannot store the record.
-    fn remember(&mut self, record: MemoryRecord) -> Result<MemoryRecord, CoreError>;
+    /// Returns [`Self::Error`](StorageBackend::Error) when the backend cannot
+    /// store the record.
+    fn remember(&mut self, record: MemoryRecord) -> Result<MemoryRecord, Self::Error>;
 
     /// Looks up a memory record by identifier.
     ///
     /// # Errors
     ///
-    /// Returns [`CoreError`] when the backend cannot perform the lookup.
-    fn get(&self, id: &MemoryId) -> Result<Option<MemoryRecord>, CoreError>;
+    /// Returns [`Self::Error`](StorageBackend::Error) when the backend cannot
+    /// perform the lookup.
+    fn get(&self, id: &MemoryId) -> Result<Option<MemoryRecord>, Self::Error>;
 }
 
 /// Supports recall and text-first retrieval flows.
@@ -85,15 +90,17 @@ pub trait RecallBackend: StorageBackend {
     ///
     /// # Errors
     ///
-    /// Returns [`CoreError`] when recall is unsupported or execution fails.
-    fn recall(&self, query: &RecallQuery) -> Result<Vec<MemoryRecord>, CoreError>;
+    /// Returns [`Self::Error`](StorageBackend::Error) when recall is
+    /// unsupported or execution fails.
+    fn recall(&self, query: &RecallQuery) -> Result<Vec<MemoryRecord>, Self::Error>;
 
     /// Returns memory records relevant to a text-first search request.
     ///
     /// # Errors
     ///
-    /// Returns [`CoreError`] when search is unsupported or execution fails.
-    fn search(&self, query: &SearchQuery) -> Result<Vec<MemoryRecord>, CoreError>;
+    /// Returns [`Self::Error`](StorageBackend::Error) when search is
+    /// unsupported or execution fails.
+    fn search(&self, query: &SearchQuery) -> Result<Vec<MemoryRecord>, Self::Error>;
 }
 
 /// Supports history inspection and version listing.
@@ -102,8 +109,9 @@ pub trait HistoryBackend: StorageBackend {
     ///
     /// # Errors
     ///
-    /// Returns [`CoreError`] when history inspection is unsupported or fails.
-    fn history(&self, query: &HistoryQuery) -> Result<Vec<VersionRecord>, CoreError>;
+    /// Returns [`Self::Error`](StorageBackend::Error) when history inspection
+    /// is unsupported or fails.
+    fn history(&self, query: &HistoryQuery) -> Result<Vec<VersionRecord>, Self::Error>;
 }
 
 /// Supports creation and inspection of stable checkpoints.
@@ -112,15 +120,17 @@ pub trait CheckpointBackend: StorageBackend {
     ///
     /// # Errors
     ///
-    /// Returns [`CoreError`] when checkpoint creation is unsupported or fails.
-    fn checkpoint(&mut self, request: &CheckpointRequest) -> Result<Checkpoint, CoreError>;
+    /// Returns [`Self::Error`](StorageBackend::Error) when checkpoint creation
+    /// is unsupported or fails.
+    fn checkpoint(&mut self, request: &CheckpointRequest) -> Result<Checkpoint, Self::Error>;
 
     /// Lists available checkpoints.
     ///
     /// # Errors
     ///
-    /// Returns [`CoreError`] when checkpoint listing is unsupported or fails.
-    fn list_checkpoints(&self) -> Result<Vec<Checkpoint>, CoreError>;
+    /// Returns [`Self::Error`](StorageBackend::Error) when checkpoint listing
+    /// is unsupported or fails.
+    fn list_checkpoints(&self) -> Result<Vec<Checkpoint>, Self::Error>;
 }
 
 /// Supports human-readable and machine-readable inspection statistics.
@@ -129,6 +139,7 @@ pub trait StatsBackend: StorageBackend {
     ///
     /// # Errors
     ///
-    /// Returns [`CoreError`] when stats inspection is unsupported or fails.
-    fn stats(&self, query: &StatsQuery) -> Result<StatsSnapshot, CoreError>;
+    /// Returns [`Self::Error`](StorageBackend::Error) when stats inspection is
+    /// unsupported or fails.
+    fn stats(&self, query: &StatsQuery) -> Result<StatsSnapshot, Self::Error>;
 }

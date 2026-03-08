@@ -45,15 +45,33 @@ pub enum MemoryKind {
     Warning,
 }
 
+fn validate_percentage(field: &'static str, value: u8) -> Result<u8, CoreError> {
+    if value > 100 {
+        return Err(CoreError::OutOfRange {
+            field,
+            min: 0,
+            max: 100,
+            actual: u64::from(value),
+        });
+    }
+
+    Ok(value)
+}
+
 /// A percentage-like importance score in the range `0..=100`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[serde(try_from = "u8", into = "u8")]
 pub struct Importance(u8);
 
 impl Importance {
-    /// Creates a new importance score.
-    #[must_use]
-    pub const fn new(value: u8) -> Self {
-        Self(value)
+    /// Creates a validated importance score.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError`] when the score is outside the supported
+    /// percentage range of `0..=100`.
+    pub fn new(value: u8) -> Result<Self, CoreError> {
+        Self::try_from(value)
     }
 
     /// Returns the raw score value.
@@ -69,15 +87,34 @@ impl Default for Importance {
     }
 }
 
+impl TryFrom<u8> for Importance {
+    type Error = CoreError;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        Ok(Self(validate_percentage("importance", value)?))
+    }
+}
+
+impl From<Importance> for u8 {
+    fn from(value: Importance) -> Self {
+        value.0
+    }
+}
+
 /// A confidence score describing how trustworthy a memory is.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[serde(try_from = "u8", into = "u8")]
 pub struct Confidence(u8);
 
 impl Confidence {
-    /// Creates a new confidence score.
-    #[must_use]
-    pub const fn new(value: u8) -> Self {
-        Self(value)
+    /// Creates a validated confidence score.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError`] when the score is outside the supported
+    /// percentage range of `0..=100`.
+    pub fn new(value: u8) -> Result<Self, CoreError> {
+        Self::try_from(value)
     }
 
     /// Returns the raw score value.
@@ -90,6 +127,20 @@ impl Confidence {
 impl Default for Confidence {
     fn default() -> Self {
         Self(100)
+    }
+}
+
+impl TryFrom<u8> for Confidence {
+    type Error = CoreError;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        Ok(Self(validate_percentage("confidence", value)?))
+    }
+}
+
+impl From<Confidence> for u8 {
+    fn from(value: Confidence) -> Self {
+        value.0
     }
 }
 
@@ -566,6 +617,36 @@ mod tests {
         assert_eq!(
             record.metadata().get("importance"),
             Some(&"high".to_string())
+        );
+    }
+
+    #[test]
+    fn importance_rejects_out_of_range_values() {
+        let result = Importance::new(101);
+
+        assert_eq!(
+            result,
+            Err(CoreError::OutOfRange {
+                field: "importance",
+                min: 0,
+                max: 100,
+                actual: 101,
+            })
+        );
+    }
+
+    #[test]
+    fn confidence_rejects_out_of_range_values() {
+        let result = Confidence::new(255);
+
+        assert_eq!(
+            result,
+            Err(CoreError::OutOfRange {
+                field: "confidence",
+                min: 0,
+                max: 100,
+                actual: 255,
+            })
         );
     }
 }
