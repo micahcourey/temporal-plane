@@ -1,14 +1,12 @@
 //! Placeholder backend implementation.
 
+use temporal_plane_core::traits::{BackendCapabilities, StorageBackend};
 use thiserror::Error;
-use temporal_plane_core::{
-    traits::{BackendCapabilities, StorageBackend},
-};
 
-/// Backend-local error type for the LanceDB adapter crate.
+/// Backend-local error type for the `LanceDB` adapter crate.
 #[derive(Debug, Error)]
 pub enum LanceDbError {
-    /// Placeholder until concrete LanceDB operations are implemented.
+    /// Placeholder until concrete `LanceDB` operations are implemented.
     #[error("lancedb backend operation is not implemented yet")]
     NotImplemented,
 }
