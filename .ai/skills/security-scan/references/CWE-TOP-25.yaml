@@ -1,0 +1,245 @@
+# CWE/SANS Top 25 Most Dangerous Software Weaknesses (2025)
+# Source: https://cwe.mitre.org/top25/archive/2025/2025_cwe_top25.html
+# Based on ~39,080 CVE records from 2024 (prevalence + severity formula)
+
+rankings:
+  - {rank: 1, id: CWE-79, name: Cross-site Scripting (XSS), category: Injection}
+  - {rank: 2, id: CWE-89, name: SQL Injection, category: Injection}
+  - {rank: 3, id: CWE-352, name: Cross-Site Request Forgery (CSRF), category: Auth}
+  - {rank: 4, id: CWE-862, name: Missing Authorization, category: Auth}
+  - {rank: 5, id: CWE-787, name: Out-of-bounds Write, category: Memory}
+  - {rank: 6, id: CWE-22, name: Path Traversal, category: File}
+  - {rank: 7, id: CWE-416, name: Use After Free, category: Memory}
+  - {rank: 8, id: CWE-125, name: Out-of-bounds Read, category: Memory}
+  - {rank: 9, id: CWE-78, name: OS Command Injection, category: Injection}
+  - {rank: 10, id: CWE-94, name: Code Injection, category: Injection}
+  - {rank: 11, id: CWE-120, name: Classic Buffer Overflow, category: Memory}
+  - {rank: 12, id: CWE-434, name: Unrestricted File Upload, category: File}
+  - {rank: 13, id: CWE-476, name: NULL Pointer Dereference, category: Memory}
+  - {rank: 14, id: CWE-121, name: Stack-based Buffer Overflow, category: Memory}
+  - {rank: 15, id: CWE-502, name: Deserialization of Untrusted Data, category: Data}
+  - {rank: 16, id: CWE-122, name: Heap-based Buffer Overflow, category: Memory}
+  - {rank: 17, id: CWE-863, name: Incorrect Authorization, category: Auth}
+  - {rank: 18, id: CWE-20, name: Improper Input Validation, category: Input}
+  - {rank: 19, id: CWE-284, name: Improper Access Control, category: Auth}
+  - {rank: 20, id: CWE-200, name: Exposure of Sensitive Information, category: Info Leak}
+  - {rank: 21, id: CWE-306, name: Missing Auth for Critical Function, category: Auth}
+  - {rank: 22, id: CWE-918, name: Server-Side Request Forgery (SSRF), category: Injection}
+  - {rank: 23, id: CWE-77, name: Command Injection, category: Injection}
+  - {rank: 24, id: CWE-639, name: Auth Bypass via User-Controlled Key, category: Auth}
+  - {rank: 25, id: CWE-770, name: Allocation Without Limits, category: DoS}
+
+# ─── Detailed Patterns for Web/API Relevant Weaknesses ─────────────────
+
+details:
+  - id: CWE-79
+    rank: 1
+    risk: critical
+    description: Application does not neutralize user input before placing it in web page output.
+    relevance: Angular apps, API endpoints returning HTML, email templates
+    vulnerable: |
+      element.innerHTML = userInput;
+      this.sanitizer.bypassSecurityTrustHtml(userInput);
+    secure: |
+      element.textContent = userInput;
+      // Angular auto-sanitizes in templates: {{ userInput }}
+      const sanitized = this.sanitizer.sanitize(SecurityContext.HTML, userInput);
+
+  - id: CWE-89
+    rank: 2
+    risk: critical
+    description: SQL commands constructed using external input without neutralization.
+    relevance: All database queries in APIs
+    vulnerable: |
+      const query = `SELECT * FROM users WHERE name = '${userName}'`;
+      await db.query(query);
+    secure: |
+      const query = 'SELECT * FROM users WHERE name = $1';
+      await db.query(query, [userName]);
+      // Or query builder:
+      await knex('users').where('name', userName).select('*');
+
+  - id: CWE-352
+    rank: 3
+    risk: high
+    description: Application does not verify request was intentionally provided by the user.
+    relevance: State-changing operations in web apps
+    secure: |
+      // SameSite cookies
+      res.cookie('session', token, { httpOnly: true, secure: true, sameSite: 'strict' });
+      // CSRF token validation
+      import csrf from 'csurf';
+      app.use(csrf({ cookie: true }));
+
+  - id: CWE-862
+    rank: 4
+    risk: critical
+    description: Application does not perform authorization checks for resource access.
+    vulnerable: |
+      router.get('/api/admin/reports', adminController.getReports);
+    secure: |
+      router.get('/api/admin/reports',
+        authMiddleware.verifyTokenRetrieveUser,
+        permissionsMiddleware.validateRequiredPrivilege(
+          PrivilegeTypes.VIEW_ADMIN_REPORTS, dataSource, pool
+        ),
+        auditUserActionMiddleware(auditService, 'VIEW_ADMIN_REPORTS'),
+        adminController.getReports
+      );
+
+  - id: CWE-22
+    rank: 6
+    risk: high
+    description: External input used to construct pathname without neutralizing ../ sequences.
+    vulnerable: |
+      const filePath = path.join('/uploads', req.params.filename);
+      fs.readFileSync(filePath);
+    secure: |
+      const UPLOAD_DIR = '/uploads';
+      const filename = path.basename(req.params.filename);
+      const filePath = path.join(UPLOAD_DIR, filename);
+      if (!filePath.startsWith(path.resolve(UPLOAD_DIR))) {
+        throw new Error('Invalid path');
+      }
+
+  - id: CWE-78
+    rank: 9
+    risk: critical
+    description: OS command constructed using external input without neutralization.
+    vulnerable: |
+      const { exec } = require('child_process');
+      exec(`grep ${searchTerm} /var/log/app.log`, callback);
+    secure: |
+      const { execFile } = require('child_process');
+      execFile('grep', [searchTerm, '/var/log/app.log'], callback);
+      // Or use native APIs instead of shell commands
+
+  - id: CWE-94
+    rank: 10
+    risk: critical
+    description: Code segment constructed using external input without neutralization.
+    dangerous_functions:
+      - "eval(userInput)"
+      - "new Function(userInput)"
+      - "setTimeout(userInput, 1000)"
+      - "setInterval(userInput, 1000)"
+
+  - id: CWE-434
+    rank: 12
+    risk: high
+    description: Application allows upload of dangerous file types without restriction.
+    secure: |
+      const ALLOWED_TYPES = ['.pdf', '.png', '.jpg', '.jpeg', '.doc', '.docx'];
+      const MAX_SIZE = 10 * 1024 * 1024; // 10MB
+      const upload = multer({
+        limits: { fileSize: MAX_SIZE },
+        fileFilter: (req, file, cb) => {
+          const ext = path.extname(file.originalname).toLowerCase();
+          if (!ALLOWED_TYPES.includes(ext)) return cb(new Error('Invalid file type'));
+          const allowedMimes = ['application/pdf', 'image/png', 'image/jpeg'];
+          if (!allowedMimes.includes(file.mimetype)) return cb(new Error('Invalid MIME type'));
+          cb(null, true);
+        }
+      });
+
+  - id: CWE-502
+    rank: 15
+    risk: high
+    description: Application deserializes untrusted data without verifying validity.
+    secure: |
+      import { z } from 'zod';
+      const UserSchema = z.object({
+        id: z.number(),
+        name: z.string().max(100),
+        email: z.string().email()
+      });
+      const parsed = UserSchema.parse(JSON.parse(userInput));
+      // Avoid: eval, Function constructor, deserializing arbitrary objects
+
+  - id: CWE-863
+    rank: 17
+    risk: high
+    description: Authorization checks performed incorrectly, allowing bypasses.
+    common_mistakes:
+      - Checking role instead of specific privilege
+      - Not validating resource ownership
+      - Trusting client-side authorization checks
+    secure: |
+      async function updateParticipant(req, res) {
+        const hasPrivilege = await privilegeService.check(req.user.id, PrivilegeTypes.EDIT_PARTICIPANT);
+        if (!hasPrivilege) return res.status(403).json({ error: 'Forbidden' });
+        const participant = await participantService.findById(req.params.id);
+        if (!req.user.agreements.some(a => a.agreement_id === participant.agreement_id)) {
+          return res.status(403).json({ error: 'Access denied to this participant' });
+        }
+      }
+
+  - id: CWE-20
+    rank: 18
+    risk: high
+    description: Input not validated or incorrectly validated for safe processing.
+    secure: |
+      import Joi from 'joi';
+      const participantSchema = Joi.object({
+        firstName: Joi.string().alphanum().min(1).max(50).required(),
+        lastName: Joi.string().alphanum().min(1).max(50).required(),
+        email: Joi.string().email().required(),
+        dateOfBirth: Joi.date().iso().max('now').required(),
+        ssn: Joi.string().pattern(/^\d{3}-\d{2}-\d{4}$/).optional()
+      });
+      const { error, value } = participantSchema.validate(req.body);
+      if (error) return res.status(400).json({ error: error.details[0].message });
+
+  - id: CWE-918
+    rank: 22
+    risk: high
+    description: Application fetches user-provided URLs without validating destination.
+    secure: |
+      const ALLOWED_HOSTS = ['api.cms.gov', 'data.medicare.gov'];
+      async function fetchUrl(userUrl: string): Promise<Response> {
+        const url = new URL(userUrl);
+        if (!ALLOWED_HOSTS.includes(url.hostname)) throw new Error('Host not in allowlist');
+        const resolved = await dns.resolve4(url.hostname);
+        if (isInternalIP(resolved[0])) throw new Error('Internal IPs not allowed');
+        return fetch(userUrl, { timeout: 5000 });
+      }
+
+  - id: CWE-770
+    rank: 25
+    risk: medium
+    description: Resources allocated based on user input without imposing limits.
+    secure: |
+      const MAX_ITEMS = 1000;
+      if (req.body.items.length > MAX_ITEMS) {
+        return res.status(400).json({ error: `Maximum ${MAX_ITEMS} items allowed` });
+      }
+      app.use(express.json({ limit: '100kb' }));
+
+# ─── Priority Matrix ──────────────────────────────────────────────────
+
+priority:
+  critical:
+    - {id: CWE-89, control: Parameterized queries}
+    - {id: CWE-862, control: permissionsMiddleware on all endpoints}
+    - {id: CWE-78, control: Avoid shell execution}
+    - {id: CWE-94, control: "No eval(), Function()"}
+
+  high:
+    - {id: CWE-79, control: Angular sanitization}
+    - {id: CWE-352, control: SameSite cookies}
+    - {id: CWE-22, control: "path.basename() validation"}
+    - {id: CWE-434, control: Type/size restrictions}
+    - {id: CWE-502, control: Schema validation (Zod/Joi)}
+    - {id: CWE-918, control: URL allowlists}
+
+  medium:
+    - {id: CWE-20, control: Joi/class-validator}
+    - {id: CWE-200, control: Structured error responses}
+    - {id: CWE-770, control: "Pagination, size limits"}
+
+references:
+  - https://cwe.mitre.org/top25/archive/2025/2025_cwe_top25.html
+  - https://cwe.mitre.org/
+  - https://www.cisa.gov/known-exploited-vulnerabilities-catalog
+
+# Last Updated: January 2026

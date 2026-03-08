@@ -1,0 +1,340 @@
+# NIST SP 800-53 Security Controls for Federal Systems
+# Source: https://csrc.nist.gov/publications/detail/sp/800-53/rev-5/final
+# Controls applicable at Moderate/High impact level (typical for healthcare/PHI systems)
+
+control_families:
+  - {id: AC, name: Access Control, relevance: critical}
+  - {id: AT, name: Awareness & Training, relevance: medium}
+  - {id: AU, name: Audit & Accountability, relevance: critical}
+  - {id: CA, name: Assessment & Authorization, relevance: medium}
+  - {id: CM, name: Configuration Management, relevance: high}
+  - {id: CP, name: Contingency Planning, relevance: medium}
+  - {id: IA, name: Identification & Authentication, relevance: critical}
+  - {id: IR, name: Incident Response, relevance: high}
+  - {id: MA, name: Maintenance, relevance: medium}
+  - {id: MP, name: Media Protection, relevance: medium}
+  - {id: PE, name: Physical & Environmental, relevance: low}
+  - {id: PL, name: Planning, relevance: medium}
+  - {id: PM, name: Program Management, relevance: medium}
+  - {id: PS, name: Personnel Security, relevance: medium}
+  - {id: RA, name: Risk Assessment, relevance: high}
+  - {id: SA, name: System & Services Acquisition, relevance: high}
+  - {id: SC, name: System & Communications Protection, relevance: critical}
+  - {id: SI, name: System & Information Integrity, relevance: critical}
+  - {id: SR, name: Supply Chain Risk Management, relevance: high}
+
+# ─── Critical Controls for Development ─────────────────────────────────
+
+controls:
+  # ── AC: Access Control ──────────────────────────────────────────────
+
+  - id: AC-2
+    name: Account Management
+    requirement: Manage system accounts including creating, enabling, modifying, disabling, and removing accounts.
+    implementation: |
+      interface AccountManagement {
+        createAccount(userData: CreateUserRequest): Promise<User>;
+        disableAccount(userId: string, reason: string): Promise<void>;
+        enableAccount(userId: string): Promise<void>;
+        removeAccount(userId: string): Promise<void>;
+        reviewAccounts(): Promise<AccountReview[]>;
+      }
+      // Audit trail for account changes
+      await auditService.log({
+        action: 'ACCOUNT_DISABLED',
+        userId: req.user.id,
+        targetUserId: userId,
+        reason: reason,
+        timestamp: new Date().toISOString()
+      });
+
+  - id: AC-3
+    name: Access Enforcement
+    requirement: Enforce approved authorizations for logical access to information and system resources.
+    implementation: |
+      // Every protected endpoint uses this pattern
+      router.get('/api/protected-resource',
+        authMiddleware.verifyTokenRetrieveUser,          // AC-3(a) Verify identity
+        permissionsMiddleware.validateRequiredPrivilege(  // AC-3(b) Check authorization
+          PrivilegeTypes.VIEW_RESOURCE, dataSource, pool
+        ),
+        auditUserActionMiddleware(auditService, 'VIEW_RESOURCE'), // AC-3(c) Audit
+        controller.getResource
+      );
+
+  - id: AC-6
+    name: Least Privilege
+    requirement: Employ the principle of least privilege, allowing only authorized accesses necessary to accomplish assigned tasks.
+    implementation: |
+      // Role-based privilege assignment
+      const ROLE_PRIVILEGES = {
+        'PARTICIPANT_VIEWER': [
+          PrivilegeTypes.VIEW_PARTICIPANT,
+          PrivilegeTypes.VIEW_PARTICIPANT_DETAILS
+        ],
+        'PARTICIPANT_EDITOR': [
+          PrivilegeTypes.VIEW_PARTICIPANT,
+          PrivilegeTypes.VIEW_PARTICIPANT_DETAILS,
+          PrivilegeTypes.EDIT_PARTICIPANT,
+          PrivilegeTypes.CREATE_PARTICIPANT
+        ],
+      };
+      // Data isolation by ACO
+      async function getParticipants(user: AuthenticatedUser): Promise<Participant[]> {
+        const agreementIds = user.agreements.map(a => a.agreement_id);
+        return db.query('SELECT * FROM participant WHERE agreement_id = ANY($1)', [agreementIds]);
+      }
+
+  # ── AU: Audit and Accountability ───────────────────────────────────
+
+  - id: AU-2
+    name: Event Logging
+    requirement: Identify events that require logging and implement logging capabilities.
+    auditable_events:
+      - {category: Authentication, examples: "Login success/failure, logout, token refresh"}
+      - {category: Authorization, examples: "Access granted/denied, privilege changes"}
+      - {category: Data Access, examples: "View PHI, export data, search operations"}
+      - {category: Data Modification, examples: "Create, update, delete records"}
+      - {category: Administrative, examples: "User creation, role assignment, config changes"}
+      - {category: System, examples: "Startup/shutdown, errors, security alerts"}
+    implementation: |
+      interface AuditEvent {
+        eventId: string;
+        timestamp: string;
+        userId: string;
+        action: string;
+        resourceType: string;
+        resourceId?: string;
+        outcome: 'SUCCESS' | 'FAILURE';
+        sourceIp: string;
+        userAgent: string;
+        details?: Record<string, unknown>;
+      }
+      async function auditLog(event: AuditEvent): Promise<void> {
+        await auditService.create(event);
+        console.log(JSON.stringify({ type: 'AUDIT', ...event }));
+      }
+
+  - id: AU-3
+    name: Content of Audit Records
+    requirement: Audit records must contain what occurred, when, where, source, and outcome.
+    required_fields:
+      what: "action, eventType"
+      when: "timestamp (ISO 8601)"
+      who: "userId, userName, userRole"
+      where: "sourceIp, userAgent"
+      target: "resourceType, resourceId, agreementId"
+      result: "outcome (SUCCESS/FAILURE)"
+      context: "fieldsModified (no PHI values in audit logs)"
+
+  - id: AU-6
+    name: Audit Record Review
+    requirement: Review and analyze audit records for indicators of inappropriate or unusual activity.
+    implementation: |
+      // CloudWatch Insights query for suspicious activity
+      const suspiciousActivityQuery = `
+        fields @timestamp, userId, action, sourceIp
+        | filter action in ['LOGIN_FAILURE', 'ACCESS_DENIED', 'PRIVILEGE_ESCALATION_ATTEMPT']
+        | stats count() as attempts by userId, sourceIp, bin(1h)
+        | filter attempts > 10
+        | sort attempts desc
+      `;
+      // Automated alerting
+      const securityAlarm = {
+        AlarmName: 'App-SuspiciousActivity',
+        MetricName: 'FailedLoginAttempts',
+        Threshold: 10,
+        Period: 300,
+        EvaluationPeriods: 1,
+        ComparisonOperator: 'GreaterThanThreshold',
+        AlarmActions: ['arn:aws:sns:us-east-1:xxxx:security-alerts']
+      };
+
+  # ── IA: Identification and Authentication ──────────────────────────
+
+  - id: IA-2
+    name: Identification and Authentication
+    requirement: Uniquely identify and authenticate organizational users.
+    implementation: |
+      import OktaJwtVerifier from '@okta/jwt-verifier';
+      const oktaJwtVerifier = new OktaJwtVerifier({
+        issuer: process.env.OKTA_ISSUER,
+        clientId: process.env.OKTA_CLIENT_ID
+      });
+      async function verifyToken(token: string): Promise<JwtClaims> {
+        const jwt = await oktaJwtVerifier.verifyAccessToken(token, 'api://default');
+        return {
+          sub: jwt.claims.sub,
+          email: jwt.claims.email,
+          groups: jwt.claims.groups,
+          iat: jwt.claims.iat,
+          exp: jwt.claims.exp
+        };
+      }
+
+  - id: IA-5
+    name: Authenticator Management
+    requirement: Manage authenticators including password complexity, change frequency, and protection.
+    password_policy:
+      min_length: 12
+      complexity: "Uppercase, lowercase, numbers, special characters"
+      reuse_prevention: "Last 24 passwords"
+      max_age_days: 90
+      lockout_threshold: 5
+
+  # ── SC: System and Communications Protection ───────────────────────
+
+  - id: SC-8
+    name: Transmission Confidentiality and Integrity
+    requirement: Protect the confidentiality and integrity of transmitted information.
+    implementation: |
+      // TLS 1.2+ required for all API communications
+      server.listen(port, {
+        key: fs.readFileSync('server.key'),
+        cert: fs.readFileSync('server.cert'),
+        secureProtocol: 'TLSv1_2_method',
+        ciphers: ['ECDHE-RSA-AES256-GCM-SHA384', 'ECDHE-RSA-AES128-GCM-SHA256'].join(':')
+      });
+      // HSTS header
+      app.use(helmet.hsts({ maxAge: 31536000, includeSubDomains: true, preload: true }));
+
+  - id: SC-12
+    name: Cryptographic Key Management
+    requirement: Establish and manage cryptographic keys using approved key management technology.
+    implementation: |
+      import { KMSClient, GenerateDataKeyCommand } from '@aws-sdk/client-kms';
+      const kms = new KMSClient({ region: process.env.AWS_REGION });
+      async function encryptData(plaintext: Buffer): Promise<EncryptedData> {
+        const { Plaintext, CiphertextBlob } = await kms.send(new GenerateDataKeyCommand({
+          KeyId: process.env.KMS_KEY_ARN,
+          KeySpec: 'AES_256'
+        }));
+        const cipher = crypto.createCipheriv('aes-256-gcm', Plaintext!, iv);
+        const encrypted = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+        return { encryptedDataKey: CiphertextBlob!, iv, authTag: cipher.getAuthTag(), ciphertext: encrypted };
+      }
+
+  - id: SC-28
+    name: Protection of Information at Rest
+    requirement: Protect the confidentiality and integrity of information at rest.
+    aws_config: |
+      # All storage encrypted at rest
+      S3Bucket:
+        BucketEncryption:
+          ServerSideEncryptionConfiguration:
+            - ServerSideEncryptionByDefault:
+                SSEAlgorithm: aws:kms
+                KMSMasterKeyID: !Ref DataKMSKey
+      RDSCluster:
+        StorageEncrypted: true
+        KmsKeyId: !Ref DataKMSKey
+      DynamoDBTable:
+        SSESpecification:
+          SSEEnabled: true
+          SSEType: KMS
+          KMSMasterKeyId: !Ref DataKMSKey
+
+  # ── SI: System and Information Integrity ────────────────────────────
+
+  - id: SI-2
+    name: Flaw Remediation
+    requirement: Identify, report, and correct system flaws in a timely manner.
+    ci_cd_commands:
+      - "npm audit --audit-level=high"
+      - "npm outdated"
+      - "npm audit fix"
+      - "trivy image app-api:latest --severity HIGH,CRITICAL"
+
+  - id: SI-3
+    name: Malicious Code Protection
+    requirement: Implement malicious code protection mechanisms.
+    implementation: |
+      import ClamAV from 'clamav.js';
+      async function scanUpload(fileBuffer: Buffer): Promise<ScanResult> {
+        const clam = new ClamAV();
+        const result = await clam.scan(fileBuffer);
+        if (result.infected) {
+          await auditService.log({
+            action: 'MALWARE_DETECTED', fileName: file.name, threat: result.virusName
+          });
+          throw new Error('File failed security scan');
+        }
+        return result;
+      }
+
+  - id: SI-4
+    name: System Monitoring
+    requirement: Monitor the system to detect attacks, indicators of potential attacks, and unauthorized connections.
+    metrics:
+      - UnauthorizedAccessAttempts
+      - FailedLogins
+      - SuspiciousDataAccess
+      - APIErrorRate
+      - DataExfiltrationIndicators
+    alarms:
+      - {metric: FailedLogins, threshold: 10, period: 300, action: alert}
+      - {metric: DataExfiltrationIndicators, threshold: 1, period: 60, action: alert-soc}
+
+  - id: SI-10
+    name: Information Input Validation
+    requirement: Check the validity of information inputs.
+    implementation: |
+      import Joi from 'joi';
+      const participantSchema = Joi.object({
+        firstName: Joi.string().min(1).max(50).pattern(/^[a-zA-Z\s'-]+$/).required(),
+        lastName: Joi.string().min(1).max(50).pattern(/^[a-zA-Z\s'-]+$/).required(),
+        email: Joi.string().email().required(),
+        dateOfBirth: Joi.date().iso().max('now').required(),
+        ssn: Joi.string().pattern(/^\d{3}-\d{2}-\d{4}$/).optional(),
+        agreementId: Joi.number().integer().positive().required()
+      });
+      router.post('/api/participants', async (req, res) => {
+        const { error, value } = participantSchema.validate(req.body, {
+          stripUnknown: true, abortEarly: false
+        });
+        if (error) {
+          return res.status(400).json({
+            error: 'VALIDATION_ERROR',
+            details: error.details.map(d => ({ field: d.path.join('.'), message: d.message }))
+          });
+        }
+      });
+
+# ─── Implementation Checklist ──────────────────────────────────────────
+
+checklist:
+  development:
+    - {control: AC-3, task: Access enforcement middleware on all endpoints}
+    - {control: AC-6, task: Role-based privilege model with least privilege}
+    - {control: AU-2/3, task: Audit logging with required fields}
+    - {control: IA-2, task: SSO integration (e.g. Okta)}
+    - {control: SC-8, task: TLS 1.2+ for all communications}
+    - {control: SI-10, task: Input validation on all endpoints}
+
+  deployment:
+    - {control: AC-2, task: Account management processes}
+    - {control: SC-12, task: KMS key management}
+    - {control: SC-28, task: Encryption at rest for all storage}
+    - {control: SI-2, task: Vulnerability scanning in CI/CD}
+    - {control: SI-4, task: CloudWatch monitoring and alerting}
+
+  operations:
+    - {control: AU-6, task: Regular audit log review}
+    - {control: SI-3, task: Malware scanning for uploads}
+    - {task: Regular security assessments}
+
+# ─── FISMA Impact Levels ───────────────────────────────────────────────
+
+fisma_levels:
+  - {level: Low, applicability: Non-sensitive data, requirements: Basic controls}
+  - {level: Moderate, applicability: Most federal systems, requirements: "Enhanced logging, MFA"}
+  - {level: High, applicability: "PHI, sensitive data", requirements: "Full control set, continuous monitoring"}
+  note: Applications handling PHI typically operate at Moderate/High impact level.
+
+references:
+  - https://csrc.nist.gov/publications/detail/sp/800-53/rev-5/final
+  - https://csrc.nist.gov/publications/detail/sp/800-53b/final
+  - https://www.fedramp.gov/documents/
+  - https://www.cms.gov/research-statistics-data-and-systems/cms-information-technology/informationsecurity
+
+# Last Updated: January 2026

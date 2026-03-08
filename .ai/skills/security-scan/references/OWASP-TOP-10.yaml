@@ -1,0 +1,134 @@
+# OWASP Top 10 (2021) Reference
+# Quick reference for OWASP Top 10 vulnerabilities with prevention patterns.
+# Use: Agent lookup when scanning code for web application security issues.
+
+items:
+  - id: A01
+    name: Broken Access Control
+    description: Restrictions on authenticated users aren't properly enforced.
+    risk_areas:
+      - Missing permissionsMiddleware.validateRequiredPrivilege
+      - Data isolation failures (missing tenant/ACO filter)
+      - Direct object reference without ownership check
+    prevention: |
+      // Always include permission check AND data isolation filter
+      router.get('/api/participants/:id',
+        authMiddleware.verifyTokenRetrieveUser,
+        permissionsMiddleware.validateRequiredPrivilege(PrivilegeTypes.ViewParticipant, dataSource, pool),
+        async (req, res) => {
+          const result = await db('participants')
+            .where({
+              participant_id: req.params.id,
+              agreement_id: req.user.agreementId  // Tenant isolation
+            });
+        }
+      );
+
+  - id: A02
+    name: Cryptographic Failures
+    description: Failures related to cryptography leading to sensitive data exposure.
+    risk_areas:
+      - PHI/PII transmitted without encryption
+      - Weak hashing algorithms
+      - Hardcoded encryption keys
+    prevention: |
+      - Use HTTPS for all communications
+      - Use AWS KMS for key management
+      - Never store keys in code
+
+  - id: A03
+    name: Injection
+    description: User-supplied data sent to an interpreter as part of a command or query.
+    risk_areas:
+      - SQL injection in database queries
+      - Command injection in system calls
+      - LDAP injection
+    prevention: |
+      // ❌ VULNERABLE - String concatenation
+      const result = await pool.query(`SELECT * FROM users WHERE id = ${userId}`);
+
+      // ✅ SAFE - Parameterized query
+      const result = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
+
+  - id: A04
+    name: Insecure Design
+    description: Missing or ineffective security controls in design.
+    risk_areas:
+      - Multi-tenant data not properly isolated
+      - Missing rate limiting
+      - No input validation schemas
+    prevention: |
+      - Always filter by tenant isolation field (e.g. agreement_id)
+      - Use validation middleware (Joi, class-validator)
+      - Implement rate limiting on public endpoints
+
+  - id: A05
+    name: Security Misconfiguration
+    description: Security settings not properly configured.
+    risk_areas:
+      - CORS misconfiguration
+      - Error messages exposing stack traces
+      - Default credentials
+      - Unnecessary features enabled
+    prevention: |
+      // Production error handler — no stack traces
+      app.use((err, req, res, next) => {
+        logger.error('Unhandled error', { error: err, userId: req.user?.id });
+        res.status(500).json({
+          error: 'Internal server error',
+          message: 'Please try again or contact support'
+        });
+      });
+
+  - id: A07
+    name: Identification & Authentication Failures
+    description: Weaknesses in user identity confirmation.
+    risk_areas:
+      - Missing JWT validation
+      - Token not checked for expiration
+      - Session fixation
+    prevention: |
+      // Always validate token first
+      router.post('/api/resource',
+        authMiddleware.verifyTokenRetrieveUser,  // Validates JWT
+        // ... other middleware
+      );
+
+  - id: A08
+    name: Software & Data Integrity Failures
+    description: Failures related to code and infrastructure without integrity checks.
+    risk_areas:
+      - Unsigned dependencies
+      - Missing audit trails
+      - Data modification without logging
+    prevention: |
+      - Use package-lock.json
+      - Always include auditUserActionMiddleware
+      - Log all data modifications
+
+  - id: A09
+    name: Security Logging & Monitoring Failures
+    description: Insufficient logging and monitoring.
+    risk_areas:
+      - Sensitive data logged inappropriately
+      - Missing audit trail
+      - No alerting on suspicious activity
+    prevention: |
+      // Log with context but without sensitive data
+      logger.info('Participant updated', {
+        participantId: id,       // OK - ID only
+        userId: req.user.id,     // OK - Actor
+        action: 'UPDATE'         // OK - Action
+        // NOT: participant.ssn, participant.dob
+      });
+
+  - id: A10
+    name: Server-Side Request Forgery (SSRF)
+    description: Web app fetches remote resource without validating user-supplied URL.
+    risk_areas:
+      - Fetching user-provided URLs
+      - Internal service calls with user input
+    prevention: |
+      - Validate and sanitize URLs
+      - Use allowlists for external services
+      - Block requests to internal networks
