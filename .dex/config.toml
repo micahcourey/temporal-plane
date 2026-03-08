@@ -1,0 +1,8 @@
+[sync.github]
+enabled = true
+
+[sync.github.auto]
+on_change = true
+
+[storage.file]
+path = "/Users/micah/Projects/temporal-plane/.dex"

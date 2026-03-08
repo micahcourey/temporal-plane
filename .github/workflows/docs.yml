@@ -1,0 +1,30 @@
+name: Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "README.md"
+      - "CHANGELOG.md"
+      - ".github/workflows/docs.yml"
+  pull_request:
+    paths:
+      - "docs/**"
+      - "README.md"
+      - "CHANGELOG.md"
+      - ".github/workflows/docs.yml"
+
+jobs:
+  markdown-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Ensure key planning docs exist
+        run: |
+          test -f docs/temporal-plane-plan-v3.md
+          test -f docs/temporal-plane-roadmap.md
+          test -f docs/lancedb-rust-sdk-agent-guide.md
+          test -f docs/repo-scaffold-spec.md

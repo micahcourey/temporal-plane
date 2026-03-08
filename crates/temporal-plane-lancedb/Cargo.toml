@@ -1,0 +1,19 @@
+[package]
+name = "temporal-plane-lancedb"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+description = "LanceDB-backed storage implementation for Temporal Plane"
+keywords.workspace = true
+categories.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+temporal-plane-core = { path = "../temporal-plane-core" }
