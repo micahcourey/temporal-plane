@@ -8,6 +8,7 @@
 # Python
 __pycache__/
 *.py[cod]
+*.egg-info/
 .venv/
 
 # Environment and editor noise
