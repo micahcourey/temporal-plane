@@ -16,5 +16,15 @@ categories.workspace = true
 workspace = true
 
 [dependencies]
+arrow-array = "57.3.0"
+arrow-schema = "57.3.0"
+futures = "0.3.32"
+lance-index = "2.0.0"
+lancedb = "0.26.2"
+serde_json = "1.0.149"
 temporal-plane-core = { path = "../temporal-plane-core" }
 thiserror.workspace = true
+tokio = { version = "1.50.0", features = ["rt-multi-thread", "macros"] }
+
+[dev-dependencies]
+tempfile = "3.23.0"
