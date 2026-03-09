@@ -205,3 +205,28 @@ fn show_surfaces_missing_memory_as_json_error() {
             .contains("memory:missing")
     );
 }
+
+#[test]
+fn history_scope_surfaces_cli_json_error() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let store = temp_dir.path().join("store");
+    let _ = init_store(&store);
+
+    let assert = cli()
+        .args([
+            "--store",
+            &store.display().to_string(),
+            "--json",
+            "history",
+            "--scope",
+            "repo:temporal-plane",
+        ])
+        .assert()
+        .failure();
+
+    let error: Value =
+        serde_json::from_slice(&assert.get_output().stderr).expect("stderr should be valid json");
+    assert_eq!(error["kind"], "error");
+    assert_eq!(error["code"], "scoped_history_not_supported");
+    assert_eq!(error["message"], "scoped history is not implemented yet");
+}

@@ -11,8 +11,8 @@ use crate::{
 
 /// Lists store-wide versions.
 ///
-/// Unlike `history`, this command intentionally mirrors the backend's current
-/// unscoped version listing behavior and does not accept a scope filter.
+/// This command mirrors the backend's current unscoped version listing
+/// behavior and does not accept a scope filter.
 pub(crate) fn run(store_path: &Path, args: &VersionsArgs) -> Result<CommandOutput, CliError> {
     let backend = open_store(store_path)?;
     let query = HistoryQuery::new(None, query_limit(args.limit)?);

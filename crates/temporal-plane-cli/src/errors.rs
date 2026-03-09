@@ -19,6 +19,9 @@ pub(crate) enum CliError {
     #[error("memory `{id}` was not found")]
     MemoryNotFound { id: String },
 
+    #[error("scoped history is not implemented yet")]
+    ScopedHistoryNotSupported,
+
     #[error("store `{path}` has not been initialized; run `temporal-plane init` first")]
     StoreNotInitialized { path: PathBuf },
 }
@@ -30,6 +33,7 @@ impl CliError {
             Self::Backend(_) => "backend_error",
             Self::Json(_) => "json_error",
             Self::MemoryNotFound { .. } => "memory_not_found",
+            Self::ScopedHistoryNotSupported => "scoped_history_not_supported",
             Self::StoreNotInitialized { .. } => "store_not_initialized",
         }
     }

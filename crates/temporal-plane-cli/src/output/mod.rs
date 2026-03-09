@@ -173,8 +173,9 @@ pub(crate) fn render_error(error: &CliError, format: OutputFormat) -> String {
             match serde_json::to_string_pretty(&envelope) {
                 Ok(json) => format!("{json}\n"),
                 Err(_) => format!(
-                    "{{\"kind\":\"error\",\"message\":{:?}}}\n",
-                    error.to_string()
+                    "{{\"kind\":\"error\",\"message\":{:?},\"code\":{:?}}}\n",
+                    error.to_string(),
+                    error.code()
                 ),
             }
         }

@@ -264,10 +264,9 @@ impl LanceDbBackend {
             None,
         )?;
 
-        payloads
-            .into_iter()
-            .map(|payload| serde_json::from_str::<MemoryRecord>(&payload).map_err(Into::into))
-            .collect()
+        let mut records = decode_memory_records(payloads)?;
+        sort_memory_records(&mut records);
+        Ok(records)
     }
 
     /// Lists pinned memories.
@@ -294,10 +293,9 @@ impl LanceDbBackend {
             None,
         )?;
 
-        payloads
-            .into_iter()
-            .map(|payload| serde_json::from_str::<MemoryRecord>(&payload).map_err(Into::into))
-            .collect()
+        let mut records = decode_memory_records(payloads)?;
+        sort_memory_records(&mut records);
+        Ok(records)
     }
 
     /// Placeholder export skeleton for Milestone 2.
@@ -852,6 +850,23 @@ fn schema_metadata_schema() -> Arc<Schema> {
 
 fn string_filter(column: &str, value: &str) -> String {
     format!("{column} = '{}'", value.replace('\'', "''"))
+}
+
+fn decode_memory_records(payloads: Vec<String>) -> Result<Vec<MemoryRecord>, LanceDbError> {
+    payloads
+        .into_iter()
+        .map(|payload| serde_json::from_str::<MemoryRecord>(&payload).map_err(Into::into))
+        .collect()
+}
+
+fn sort_memory_records(records: &mut [MemoryRecord]) {
+    records.sort_by(|left, right| {
+        right
+            .updated_at()
+            .value()
+            .cmp(&left.updated_at().value())
+            .then_with(|| left.id().as_str().cmp(right.id().as_str()))
+    });
 }
 
 fn system_time_to_parts(

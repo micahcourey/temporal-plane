@@ -25,7 +25,7 @@ fn main() -> ExitCode {
                 ExitCode::SUCCESS
             }
             Err(error) => {
-                eprintln!("failed to render output: {error}");
+                eprint!("{}", render_error(&error, cli.output_format()));
                 ExitCode::FAILURE
             }
         },
