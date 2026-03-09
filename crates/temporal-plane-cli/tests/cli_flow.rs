@@ -196,12 +196,13 @@ fn init_and_full_inspection_flow_outputs_stable_json() {
 }
 
 #[test]
-fn export_surfaces_not_implemented_as_json_error() {
+fn export_surfaces_success_as_json_status() {
     let temp_dir = tempdir().expect("temp dir should be created");
     let store = temp_dir.path().join("store");
     let _ = init_store(&store);
+    let destination = temp_dir.path().join("export-store");
 
-    let assert = cli()
+    let exported = cli()
         .args([
             "--store",
             &store.display().to_string(),
@@ -209,20 +210,23 @@ fn export_surfaces_not_implemented_as_json_error() {
             "export",
             "--destination",
         ])
-        .arg(temp_dir.path().join("export.json"))
+        .arg(&destination)
         .assert()
-        .failure();
+        .success();
 
-    let error: Value =
-        serde_json::from_slice(&assert.get_output().stderr).expect("stderr should be valid json");
-    assert_eq!(error["kind"], "error");
-    assert_eq!(error["code"], "backend_error");
+    let output: Value =
+        serde_json::from_slice(&exported.get_output().stdout).expect("stdout should be valid json");
+    assert_eq!(output["kind"], "status");
+    assert_eq!(output["data"]["command"], "export");
+    assert_eq!(output["data"]["status"], "ok");
+    assert_eq!(output["data"]["path"], store.display().to_string());
     assert!(
-        error["message"]
+        output["data"]["message"]
             .as_str()
-            .expect("string error")
-            .contains("not implemented")
+            .expect("string message")
+            .contains(&destination.display().to_string())
     );
+    assert!(destination.exists());
 }
 
 #[test]

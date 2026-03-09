@@ -1,11 +1,13 @@
 //! Storage-facing traits owned by the core product layer.
 
 use std::collections::BTreeSet;
+use std::path::Path;
 
 use crate::{
-    Checkpoint, CheckpointRequest, HistoryQuery, MemoryId, MemoryRecord, OptimizeRequest,
-    OptimizeResult, RecallQuery, RecallResult, RestoreRequest, RestoreResult, SearchQuery,
-    StatsQuery, StatsSnapshot, VersionRecord,
+    BranchListResult, BranchName, BranchRecord, BranchRequest, Checkpoint, CheckpointRequest,
+    CloneInfo, HistoryQuery, ImportStageRequest, ImportStageResult, MemoryId, MemoryRecord,
+    OptimizeRequest, OptimizeResult, RecallQuery, RecallResult, RestoreRequest, RestoreResult,
+    SearchQuery, StatsQuery, StatsSnapshot, VersionRecord,
 };
 
 /// An individually advertised backend capability.
@@ -25,6 +27,16 @@ pub enum BackendCapability {
     Checkpoints,
     /// The backend can run explicit maintenance and cleanup flows.
     Optimize,
+    /// The backend can create experimental branches.
+    BranchCreate,
+    /// The backend can inspect available branches.
+    BranchList,
+    /// The backend can stage imports onto isolated branches.
+    ImportStaging,
+    /// The backend can create lightweight shallow clones.
+    ShallowClone,
+    /// The backend can create full deep clones.
+    DeepClone,
 }
 
 /// Declares which product-level operations a backend supports.
@@ -78,6 +90,36 @@ impl BackendCapabilities {
     #[must_use]
     pub fn supports_optimize(&self) -> bool {
         self.0.contains(&BackendCapability::Optimize)
+    }
+
+    /// Returns `true` when the backend can create branches.
+    #[must_use]
+    pub fn supports_branch_create(&self) -> bool {
+        self.0.contains(&BackendCapability::BranchCreate)
+    }
+
+    /// Returns `true` when the backend can inspect branches.
+    #[must_use]
+    pub fn supports_branch_list(&self) -> bool {
+        self.0.contains(&BackendCapability::BranchList)
+    }
+
+    /// Returns `true` when the backend can stage imports onto branches.
+    #[must_use]
+    pub fn supports_import_staging(&self) -> bool {
+        self.0.contains(&BackendCapability::ImportStaging)
+    }
+
+    /// Returns `true` when the backend can create shallow clones.
+    #[must_use]
+    pub fn supports_shallow_clone(&self) -> bool {
+        self.0.contains(&BackendCapability::ShallowClone)
+    }
+
+    /// Returns `true` when the backend can create deep clones.
+    #[must_use]
+    pub fn supports_deep_clone(&self) -> bool {
+        self.0.contains(&BackendCapability::DeepClone)
     }
 }
 
@@ -197,6 +239,58 @@ pub trait OptimizeBackend: StorageBackend {
     /// Returns [`Self::Error`](StorageBackend::Error) when optimization or
     /// cleanup fails.
     fn optimize(&mut self, request: &OptimizeRequest) -> Result<OptimizeResult, Self::Error>;
+}
+
+/// Supports advanced branch-aware and clone-aware storage workflows.
+pub trait AdvancedStorageBackend: StorageBackend {
+    /// Creates a named storage branch.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Self::Error`](StorageBackend::Error) when branch creation is
+    /// unsupported or fails.
+    fn create_branch(&mut self, request: &BranchRequest) -> Result<BranchRecord, Self::Error>;
+
+    /// Lists visible storage branches.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Self::Error`](StorageBackend::Error) when branch listing is
+    /// unsupported or fails.
+    fn list_branches(&self) -> Result<BranchListResult, Self::Error>;
+
+    /// Deletes a branch that no longer contains staged changes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Self::Error`](StorageBackend::Error) when the branch cannot
+    /// be deleted safely.
+    fn delete_branch(&mut self, name: &BranchName) -> Result<(), Self::Error>;
+
+    /// Stages an import onto an isolated branch.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Self::Error`](StorageBackend::Error) when the import cannot
+    /// be staged safely.
+    fn stage_import(
+        &mut self,
+        request: &ImportStageRequest,
+    ) -> Result<ImportStageResult, Self::Error>;
+
+    /// Creates a shallow clone of the current store.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Self::Error`](StorageBackend::Error) when cloning fails.
+    fn shallow_clone(&self, destination: &Path) -> Result<CloneInfo, Self::Error>;
+
+    /// Creates a deep clone of the current store.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Self::Error`](StorageBackend::Error) when cloning fails.
+    fn deep_clone(&self, destination: &Path) -> Result<CloneInfo, Self::Error>;
 }
 
 /// Supports human-readable and machine-readable inspection statistics.

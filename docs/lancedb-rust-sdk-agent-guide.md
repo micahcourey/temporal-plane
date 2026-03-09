@@ -358,6 +358,8 @@ For Temporal Plane:
 
 Branching is one of the most important newer Lance capabilities for future Temporal Plane design.
 
+See [docs/branch-lifecycle.md](branch-lifecycle.md) for the current Temporal Plane lifecycle policy layered on top of these storage primitives.
+
 ### What the new Lance model provides
 
 - independent version history per branch

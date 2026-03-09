@@ -1,8 +1,132 @@
 //! Product-level maintenance and cleanup request contracts.
 
+use std::path::{Path, PathBuf};
+
 use serde::{Deserialize, Serialize};
 
-use crate::{Checkpoint, RetentionPolicy, VersionNumber};
+use crate::{BranchName, Checkpoint, RetentionPolicy, VersionNumber};
+
+/// Describes the storage-level clone strategy used for an exported store.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum CloneKind {
+    /// Clone manifests and lineage cheaply while sharing existing data files.
+    Shallow,
+    /// Copy all dataset files for a fully isolated clone.
+    Deep,
+}
+
+/// Describes a completed store clone operation.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct CloneInfo {
+    destination: PathBuf,
+    version_count: u64,
+    kind: CloneKind,
+}
+
+impl CloneInfo {
+    /// Creates clone metadata.
+    #[must_use]
+    pub fn new(destination: PathBuf, version_count: u64, kind: CloneKind) -> Self {
+        Self {
+            destination,
+            version_count,
+            kind,
+        }
+    }
+
+    /// Returns the clone destination path.
+    #[must_use]
+    pub fn destination(&self) -> &Path {
+        &self.destination
+    }
+
+    /// Returns the number of visible versions carried into the clone.
+    #[must_use]
+    pub const fn version_count(&self) -> u64 {
+        self.version_count
+    }
+
+    /// Returns the clone strategy that was used.
+    #[must_use]
+    pub const fn kind(&self) -> CloneKind {
+        self.kind
+    }
+}
+
+/// A request to stage an import onto an isolated branch.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ImportStageRequest {
+    source_path: PathBuf,
+    branch_name: Option<BranchName>,
+}
+
+impl ImportStageRequest {
+    /// Creates an import staging request.
+    #[must_use]
+    pub fn new(source_path: impl Into<PathBuf>) -> Self {
+        Self {
+            source_path: source_path.into(),
+            branch_name: None,
+        }
+    }
+
+    /// Returns the source store path to import from.
+    #[must_use]
+    pub fn source_path(&self) -> &Path {
+        &self.source_path
+    }
+
+    /// Returns the optional destination staging branch override.
+    #[must_use]
+    pub const fn branch_name(&self) -> Option<&BranchName> {
+        self.branch_name.as_ref()
+    }
+
+    /// Overrides the staging branch name.
+    #[must_use]
+    pub fn with_branch_name(mut self, branch_name: BranchName) -> Self {
+        self.branch_name = Some(branch_name);
+        self
+    }
+}
+
+/// A result describing an isolated staged import.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ImportStageResult {
+    branch_name: BranchName,
+    staged_records: u64,
+    ready_to_merge: bool,
+}
+
+impl ImportStageResult {
+    /// Creates an import staging result.
+    #[must_use]
+    pub fn new(branch_name: BranchName, staged_records: u64, ready_to_merge: bool) -> Self {
+        Self {
+            branch_name,
+            staged_records,
+            ready_to_merge,
+        }
+    }
+
+    /// Returns the staging branch name.
+    #[must_use]
+    pub const fn branch_name(&self) -> &BranchName {
+        &self.branch_name
+    }
+
+    /// Returns the number of records staged onto the branch.
+    #[must_use]
+    pub const fn staged_records(&self) -> u64 {
+        self.staged_records
+    }
+
+    /// Returns `true` when the staged branch is ready for follow-up review.
+    #[must_use]
+    pub const fn ready_to_merge(&self) -> bool {
+        self.ready_to_merge
+    }
+}
 
 /// A request to run explicit store maintenance.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -120,9 +244,30 @@ impl OptimizeResult {
 mod tests {
     use std::time::UNIX_EPOCH;
 
-    use crate::{CheckpointName, RecordedAt};
+    use crate::{BranchName, CheckpointName, RecordedAt};
 
     use super::*;
+
+    #[test]
+    fn import_stage_request_preserves_branch_override() {
+        let request = ImportStageRequest::new("/tmp/source-store")
+            .with_branch_name(BranchName::try_from("import-stage").expect("valid branch"));
+
+        assert_eq!(request.source_path(), Path::new("/tmp/source-store"));
+        assert_eq!(
+            request.branch_name().map(BranchName::as_str),
+            Some("import-stage")
+        );
+    }
+
+    #[test]
+    fn clone_info_tracks_destination_and_kind() {
+        let info = CloneInfo::new(PathBuf::from("/tmp/exported-store"), 4, CloneKind::Deep);
+
+        assert_eq!(info.destination(), Path::new("/tmp/exported-store"));
+        assert_eq!(info.version_count(), 4);
+        assert_eq!(info.kind(), CloneKind::Deep);
+    }
 
     #[test]
     fn optimize_request_defaults_to_non_pruning() {

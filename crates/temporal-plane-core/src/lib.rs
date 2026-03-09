@@ -166,6 +166,7 @@
 
 mod identifiers;
 
+pub mod branches;
 pub mod checkpoints;
 pub mod errors;
 pub mod maintenance;
@@ -174,6 +175,7 @@ pub mod query;
 pub mod retention;
 pub mod traits;
 
+pub use branches::{BranchListResult, BranchName, BranchRecord, BranchRequest, BranchStatus};
 pub use checkpoints::{
     Checkpoint, CheckpointRequest, CheckpointSelector, CheckpointSummary, RestoreRequest,
     RestoreResult, VersionNumber, VersionRecord,
@@ -183,7 +185,9 @@ pub use identifiers::{
     CheckpointName, EntityName, MemoryId, RecordedAt, ScopeId, SessionId, SourceRef, TagName,
     ToolName,
 };
-pub use maintenance::{OptimizeRequest, OptimizeResult};
+pub use maintenance::{
+    CloneInfo, CloneKind, ImportStageRequest, ImportStageResult, OptimizeRequest, OptimizeResult,
+};
 pub use memory::{Confidence, Importance, MemoryKind, MemoryRecord, MemoryRecordBuilder, PinState};
 pub use query::{
     DisclosureDepth, HistoryQuery, QueryLimit, RecallEntry, RecallExplanation, RecallLayer,
@@ -194,6 +198,7 @@ pub use retention::{
     RetentionPolicy,
 };
 pub use traits::{
-    BackendCapabilities, BackendCapability, CheckpointBackend, HistoryBackend, MemoryRepository,
-    OptimizeBackend, PinningBackend, RecallBackend, RestoreBackend, StatsBackend, StorageBackend,
+    AdvancedStorageBackend, BackendCapabilities, BackendCapability, CheckpointBackend,
+    HistoryBackend, MemoryRepository, OptimizeBackend, PinningBackend, RecallBackend,
+    RestoreBackend, StatsBackend, StorageBackend,
 };

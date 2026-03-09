@@ -8,6 +8,13 @@ ignore = [
   # `paste` is pulled transitively by the current `lancedb` / `lance` stack.
   # There is no safe upgrade available yet, so we track it until upstream moves.
   "RUSTSEC-2024-0436",
+  # `rsa` is pulled transitively via `reqsign` -> `opendal` in the current
+  # `lancedb` / `lance` stack. Temporal Plane uses this dependency chain only in
+  # local filesystem contexts and no safe upgrade is available yet.
+  "RUSTSEC-2023-0071",
+  # `rustls-pemfile` is pulled transitively by the current `lancedb` / `lance`
+  # stack and is archived upstream without a drop-in replacement in this graph.
+  "RUSTSEC-2025-0134",
 ]
 
 [licenses]
@@ -16,6 +23,7 @@ allow = [
   "Apache-2.0",
   "BSL-1.0",
   "CC0-1.0",
+  "CDLA-Permissive-2.0",
   "MIT",
   "0BSD",
   "BSD-3-Clause",

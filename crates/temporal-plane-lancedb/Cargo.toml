@@ -19,6 +19,7 @@ workspace = true
 arrow-array = "57.3.0"
 arrow-schema = "57.3.0"
 futures = "0.3.32"
+lance = "2.0.0"
 lance-index = "2.0.0"
 lancedb = "0.26.2"
 serde_json = "1.0.149"

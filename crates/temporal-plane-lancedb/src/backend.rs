@@ -5,7 +5,7 @@ use std::{
     future::Future,
     path::{Path, PathBuf},
     sync::Arc,
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use arrow_array::{
@@ -13,17 +13,19 @@ use arrow_array::{
 };
 use arrow_schema::{DataType, Field, Schema};
 use futures::TryStreamExt;
+use lance::dataset::{builder::DatasetBuilder as LanceDatasetBuilder, refs::BranchContents};
 use lance_index::scalar::FullTextSearchQuery;
 use lancedb::{
     Table, connect,
     connection::Connection,
     index::{Index, IndexType, scalar::FtsIndexBuilder},
     query::{ExecutableQuery, QueryBase, Select},
-    table::{CompactionOptions, OptimizeAction, OptimizeOptions},
+    table::{BaseTable, CompactionOptions, NativeTable, OptimizeAction, OptimizeOptions},
 };
 use temporal_plane_core::{
-    CheckpointName, CoreError, Importance, MemoryId, OptimizeRequest, OptimizeResult, RecordedAt,
-    RestoreRequest, RestoreResult, ScopeId,
+    BranchListResult, BranchName, BranchRecord, BranchRequest, BranchStatus, CheckpointName,
+    CloneInfo, CloneKind, CoreError, ImportStageRequest, ImportStageResult, Importance, MemoryId,
+    OptimizeRequest, OptimizeResult, RecordedAt, RestoreRequest, RestoreResult, ScopeId,
     checkpoints::{
         Checkpoint, CheckpointRequest, CheckpointSelector, CheckpointSummary, VersionNumber,
         VersionRecord,
@@ -35,9 +37,9 @@ use temporal_plane_core::{
     },
     retention::{CleanupMode, PreOperationCheckpointPolicy},
     traits::{
-        BackendCapabilities, BackendCapability, CheckpointBackend, HistoryBackend,
-        MemoryRepository, OptimizeBackend, PinningBackend, RecallBackend, RestoreBackend,
-        StatsBackend, StorageBackend,
+        AdvancedStorageBackend, BackendCapabilities, BackendCapability, CheckpointBackend,
+        HistoryBackend, MemoryRepository, OptimizeBackend, PinningBackend, RecallBackend,
+        RestoreBackend, StatsBackend, StorageBackend,
     },
 };
 use thiserror::Error;
@@ -58,6 +60,10 @@ const RECALL_FETCH_MULTIPLIER: usize = 4;
 #[non_exhaustive]
 #[derive(Debug, Error)]
 pub enum LanceDbError {
+    /// Wraps lower-level Lance dataset failures.
+    #[error(transparent)]
+    Lance(#[from] lance::Error),
+
     /// Wraps storage-agnostic domain validation failures.
     #[error(transparent)]
     Core(#[from] CoreError),
@@ -113,6 +119,20 @@ pub enum LanceDbError {
     DuplicateCheckpointVersion {
         /// Duplicate version number.
         version: u64,
+    },
+
+    /// Indicates a branch could not be resolved by name.
+    #[error("branch `{name}` was not found")]
+    BranchNotFound {
+        /// Missing branch name.
+        name: String,
+    },
+
+    /// Indicates a branch still contains staged changes.
+    #[error("branch `{name}` has staged changes and cannot be deleted")]
+    BranchHasChanges {
+        /// Branch name that still diverges from its parent version.
+        name: String,
     },
 
     /// Indicates a checkpoint could not be resolved by name.
@@ -342,18 +362,22 @@ impl LanceDbBackend {
     ///
     /// # Errors
     ///
-    /// Always returns [`LanceDbError::NotImplemented`].
-    pub fn export_store(&self, _destination: impl AsRef<Path>) -> Result<(), LanceDbError> {
-        Err(LanceDbError::NotImplemented { feature: "export" })
+    /// Returns [`LanceDbError`] when the clone cannot be created.
+    pub fn export_store(&self, destination: impl AsRef<Path>) -> Result<(), LanceDbError> {
+        self.deep_clone(destination.as_ref())?;
+        Ok(())
     }
 
     /// Placeholder import skeleton for Milestone 2.
     ///
     /// # Errors
     ///
-    /// Always returns [`LanceDbError::NotImplemented`].
-    pub fn import_store(&mut self, _source: impl AsRef<Path>) -> Result<(), LanceDbError> {
-        Err(LanceDbError::NotImplemented { feature: "import" })
+    /// Returns [`LanceDbError`] when the import cannot be staged.
+    pub fn import_store(
+        &mut self,
+        source: impl AsRef<Path>,
+    ) -> Result<ImportStageResult, LanceDbError> {
+        self.stage_import(&ImportStageRequest::new(source.as_ref().to_path_buf()))
     }
 
     /// Restores the memories table from a historical version or checkpoint.
@@ -636,6 +660,227 @@ impl LanceDbBackend {
         self.block_on(self.memories.count_rows(filter))
     }
 
+    fn table_uri(&self, table: &Table) -> Result<String, LanceDbError> {
+        self.block_on(table.uri())
+    }
+
+    fn load_lance_dataset(&self, uri: &str) -> Result<lance::dataset::Dataset, LanceDbError> {
+        self.block_on_lance(LanceDatasetBuilder::from_uri(uri).load())
+    }
+
+    fn load_branch_dataset(
+        &self,
+        uri: &str,
+        branch: &BranchName,
+    ) -> Result<lance::dataset::Dataset, LanceDbError> {
+        self.block_on_lance(
+            LanceDatasetBuilder::from_uri(uri)
+                .with_branch(branch.as_str(), None)
+                .load(),
+        )
+    }
+
+    fn open_branch_memories_table(&self, branch: &BranchName) -> Result<Table, LanceDbError> {
+        let uri = self.table_uri(&self.memories)?;
+        let dataset = self.load_branch_dataset(&uri, branch)?;
+        // `with_branch()` resolves the branch to its branch-specific dataset
+        // location, so opening the table at that resolved URI preserves branch
+        // isolation for subsequent reads and writes.
+        let native = self.block_on(NativeTable::open(dataset.uri()))?;
+        let inner: Arc<dyn BaseTable> = Arc::new(native);
+        Ok(Table::from(inner))
+    }
+
+    fn force_delete_branch_internal(&self, name: &BranchName) -> Result<(), LanceDbError> {
+        let memories_uri = self.table_uri(&self.memories)?;
+        let mut dataset = self.load_lance_dataset(&memories_uri)?;
+        self.block_on_lance(dataset.force_delete_branch(name.as_str()))?;
+        Ok(())
+    }
+
+    fn insert_memory_record(
+        &self,
+        table: &Table,
+        record: &MemoryRecord,
+    ) -> Result<(), LanceDbError> {
+        self.block_on_backend(insert_memory_record_async(table, record))
+    }
+
+    fn branch_record_from_contents(
+        name: String,
+        contents: &BranchContents,
+    ) -> Result<BranchRecord, LanceDbError> {
+        let created_at = UNIX_EPOCH
+            .checked_add(Duration::from_secs(contents.create_at))
+            .ok_or(LanceDbError::InvalidTimestamp {
+                field: "branch_created_at",
+            })?;
+
+        Ok(BranchRecord::new(
+            BranchName::new(name)?,
+            VersionNumber::new(contents.parent_version),
+            RecordedAt::new(created_at),
+            // Lance exposes branch lineage metadata but not a richer lifecycle
+            // state, so visible branches are surfaced as active here.
+            BranchStatus::Active,
+        ))
+    }
+
+    fn next_import_stage_branch_name(&self) -> Result<BranchName, LanceDbError> {
+        let current_version = self.block_on(self.memories.version())?;
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|_| LanceDbError::InvalidTimestamp {
+                field: "import_stage_branch_name",
+            })?
+            .as_secs();
+
+        Ok(BranchName::new(format!(
+            "import-stage-v{current_version}-{timestamp}"
+        ))?)
+    }
+
+    fn clone_destination_uri(destination: &Path, table_name: &str) -> String {
+        destination
+            .join(format!("{table_name}.lance"))
+            .to_string_lossy()
+            .into_owned()
+    }
+
+    fn deep_copy_dataset(source_uri: &str, destination_uri: &str) -> Result<(), LanceDbError> {
+        fn copy_dir_recursive(source: &Path, destination: &Path) -> Result<(), LanceDbError> {
+            std::fs::create_dir_all(destination)?;
+
+            for entry in std::fs::read_dir(source)? {
+                let entry = entry?;
+                let source_path = entry.path();
+                let destination_path = destination.join(entry.file_name());
+                let metadata = entry.metadata()?;
+
+                if metadata.is_dir() {
+                    copy_dir_recursive(&source_path, &destination_path)?;
+                } else {
+                    std::fs::copy(&source_path, &destination_path)?;
+                }
+            }
+
+            Ok(())
+        }
+
+        copy_dir_recursive(Path::new(source_uri), Path::new(destination_uri))
+    }
+
+    fn clone_table_dataset(
+        &self,
+        source_uri: &str,
+        destination_uri: &str,
+        kind: CloneKind,
+    ) -> Result<(), LanceDbError> {
+        let mut dataset = self.load_lance_dataset(source_uri)?;
+        match kind {
+            CloneKind::Shallow => {
+                self.block_on_lance(dataset.shallow_clone(
+                    destination_uri,
+                    dataset.manifest.version,
+                    None,
+                ))?;
+            }
+            CloneKind::Deep => {
+                Self::deep_copy_dataset(source_uri, destination_uri)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn clone_store_internal(
+        &self,
+        destination: &Path,
+        kind: CloneKind,
+    ) -> Result<CloneInfo, LanceDbError> {
+        if destination == self.path() {
+            return Err(LanceDbError::InvalidStorePath {
+                path: destination.to_path_buf(),
+                details: "clone destination must differ from the source store",
+            });
+        }
+
+        std::fs::create_dir_all(destination)?;
+
+        let memories_uri = self.table_uri(&self.memories)?;
+        let checkpoints_uri = self.table_uri(&self.checkpoints)?;
+        let schema_metadata_uri = self.table_uri(&self.schema_metadata)?;
+
+        let cloned_memories_uri = Self::clone_destination_uri(destination, MEMORIES_TABLE);
+
+        self.clone_table_dataset(&memories_uri, &cloned_memories_uri, kind)?;
+        self.clone_table_dataset(
+            &checkpoints_uri,
+            &Self::clone_destination_uri(destination, CHECKPOINTS_TABLE),
+            kind,
+        )?;
+        self.clone_table_dataset(
+            &schema_metadata_uri,
+            &Self::clone_destination_uri(destination, SCHEMA_METADATA_TABLE),
+            kind,
+        )?;
+
+        let cloned_backend = Self::open(destination)?;
+        let version_count = cloned_backend
+            .block_on(cloned_backend.memories.list_versions())?
+            .len() as u64;
+        Ok(CloneInfo::new(
+            destination.to_path_buf(),
+            version_count,
+            kind,
+        ))
+    }
+
+    fn stage_import_records(
+        &self,
+        source_table: &Table,
+        branch_table: &Table,
+    ) -> Result<u64, LanceDbError> {
+        self.block_on_backend(async {
+            let mut staged_records = 0_u64;
+            let mut stream = source_table
+                .query()
+                .select(Select::Columns(vec![PAYLOAD_COLUMN.to_owned()]))
+                .execute()
+                .await?;
+
+            while let Some(batch) = stream.try_next().await? {
+                let Some(array) = batch
+                    .column_by_name(PAYLOAD_COLUMN)
+                    .and_then(|column| column.as_any().downcast_ref::<StringArray>())
+                else {
+                    return Err(LanceDbError::InvalidData {
+                        field: PAYLOAD_COLUMN,
+                        details: "expected Utf8 payload column".to_owned(),
+                    });
+                };
+
+                for index in 0..array.len() {
+                    if array.is_null(index) {
+                        return Err(LanceDbError::InvalidData {
+                            field: PAYLOAD_COLUMN,
+                            details: "null payload value".to_owned(),
+                        });
+                    }
+
+                    let record = serde_json::from_str::<MemoryRecord>(array.value(index))?;
+                    if table_contains_memory_id_async(branch_table, record.id()).await? {
+                        continue;
+                    }
+
+                    insert_memory_record_async(branch_table, &record).await?;
+                    staged_records += 1;
+                }
+            }
+
+            Ok(staged_records)
+        })
+    }
+
     fn query_payloads(
         &self,
         table: &Table,
@@ -694,6 +939,28 @@ impl LanceDbBackend {
 
         Ok(self.runtime.block_on(future)?)
     }
+
+    fn block_on_backend<F, T>(&self, future: F) -> Result<T, LanceDbError>
+    where
+        F: Future<Output = Result<T, LanceDbError>>,
+    {
+        if Handle::try_current().is_ok() {
+            return Err(LanceDbError::UnsupportedCallerContext);
+        }
+
+        self.runtime.block_on(future)
+    }
+
+    fn block_on_lance<F, T>(&self, future: F) -> Result<T, LanceDbError>
+    where
+        F: Future<Output = Result<T, lance::Error>>,
+    {
+        if Handle::try_current().is_ok() {
+            return Err(LanceDbError::UnsupportedCallerContext);
+        }
+
+        Ok(self.runtime.block_on(future)?)
+    }
 }
 
 impl StorageBackend for LanceDbBackend {
@@ -708,6 +975,11 @@ impl StorageBackend for LanceDbBackend {
             BackendCapability::Restore,
             BackendCapability::Checkpoints,
             BackendCapability::Optimize,
+            BackendCapability::BranchCreate,
+            BackendCapability::BranchList,
+            BackendCapability::ImportStaging,
+            BackendCapability::ShallowClone,
+            BackendCapability::DeepClone,
         ])
     }
 }
@@ -720,43 +992,7 @@ impl MemoryRepository for LanceDbBackend {
             });
         }
 
-        let payload_json = serde_json::to_string(&record)?;
-        let (created_secs, created_nanos) =
-            system_time_to_parts(record.created_at().value(), "created_at")?;
-        let (updated_secs, updated_nanos) =
-            system_time_to_parts(record.updated_at().value(), "updated_at")?;
-        let schema = memories_schema();
-        let batch = RecordBatch::try_new(
-            schema.clone(),
-            vec![
-                Arc::new(StringArray::from(vec![Some(record.id().as_str())])),
-                Arc::new(StringArray::from(vec![Some(record.scope_id().as_str())])),
-                Arc::new(StringArray::from(vec![Some(memory_kind_name(
-                    record.kind(),
-                ))])),
-                Arc::new(StringArray::from(vec![Some(record.title())])),
-                Arc::new(StringArray::from(vec![Some(record.summary())])),
-                Arc::new(StringArray::from(vec![Some(record.detail())])),
-                Arc::new(StringArray::from(vec![Some(record.fts_text())])),
-                Arc::new(UInt32Array::from(vec![u32::from(
-                    record.importance().value(),
-                )])),
-                Arc::new(UInt32Array::from(vec![u32::from(
-                    record.confidence().value(),
-                )])),
-                Arc::new(UInt64Array::from(vec![created_secs])),
-                Arc::new(UInt32Array::from(vec![created_nanos])),
-                Arc::new(UInt64Array::from(vec![updated_secs])),
-                Arc::new(UInt32Array::from(vec![updated_nanos])),
-                Arc::new(BooleanArray::from(vec![record.pin_state().is_pinned()])),
-                Arc::new(StringArray::from(vec![Some(payload_json.as_str())])),
-            ],
-        )?;
-        let reader = Box::new(RecordBatchIterator::new(
-            vec![Ok(batch)].into_iter(),
-            schema,
-        ));
-        self.block_on(self.memories.add(reader).execute())?;
+        self.insert_memory_record(&self.memories, &record)?;
         Ok(record)
     }
 
@@ -973,6 +1209,98 @@ impl CheckpointBackend for LanceDbBackend {
 impl OptimizeBackend for LanceDbBackend {
     fn optimize(&mut self, request: &OptimizeRequest) -> Result<OptimizeResult, Self::Error> {
         self.optimize_store(request)
+    }
+}
+
+impl AdvancedStorageBackend for LanceDbBackend {
+    fn create_branch(&mut self, request: &BranchRequest) -> Result<BranchRecord, Self::Error> {
+        let memories_uri = self.table_uri(&self.memories)?;
+        let mut dataset = self.load_lance_dataset(&memories_uri)?;
+        let base_version = request
+            .base_version()
+            .map_or(dataset.manifest.version, VersionNumber::value);
+
+        self.block_on_lance(dataset.create_branch(request.name().as_str(), base_version, None))?;
+        let contents = self
+            .block_on_lance(dataset.list_branches())?
+            .remove(request.name().as_str())
+            .ok_or_else(|| LanceDbError::BranchNotFound {
+                name: request.name().as_str().to_owned(),
+            })?;
+
+        Self::branch_record_from_contents(request.name().as_str().to_owned(), &contents)
+    }
+
+    fn list_branches(&self) -> Result<BranchListResult, Self::Error> {
+        let memories_uri = self.table_uri(&self.memories)?;
+        let dataset = self.load_lance_dataset(&memories_uri)?;
+        let mut branches = self
+            .block_on_lance(dataset.list_branches())?
+            .into_iter()
+            .map(|(name, contents)| Self::branch_record_from_contents(name, &contents))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        branches.sort_by(|left, right| left.name().cmp(right.name()));
+        Ok(BranchListResult::new(branches))
+    }
+
+    fn delete_branch(&mut self, name: &BranchName) -> Result<(), Self::Error> {
+        let memories_uri = self.table_uri(&self.memories)?;
+        let mut dataset = self.load_lance_dataset(&memories_uri)?;
+        let branches = self.block_on_lance(dataset.list_branches())?;
+        let Some(contents) = branches.get(name.as_str()) else {
+            return Err(LanceDbError::BranchNotFound {
+                name: name.as_str().to_owned(),
+            });
+        };
+
+        let branch_dataset = self.load_branch_dataset(&memories_uri, name)?;
+        let latest_branch_version = self.block_on_lance(branch_dataset.latest_version_id())?;
+        if latest_branch_version > contents.parent_version {
+            return Err(LanceDbError::BranchHasChanges {
+                name: name.as_str().to_owned(),
+            });
+        }
+
+        self.block_on_lance(dataset.delete_branch(name.as_str()))?;
+        Ok(())
+    }
+
+    fn stage_import(
+        &mut self,
+        request: &ImportStageRequest,
+    ) -> Result<ImportStageResult, Self::Error> {
+        let source_backend = Self::open(request.source_path())?;
+
+        let branch_name = request
+            .branch_name()
+            .cloned()
+            .unwrap_or(self.next_import_stage_branch_name()?);
+        let branch_record = self.create_branch(&BranchRequest::new(branch_name.clone()))?;
+        let staged_records = match (|| {
+            let branch_table = self.open_branch_memories_table(branch_record.name())?;
+            self.stage_import_records(&source_backend.memories, &branch_table)
+        })() {
+            Ok(staged_records) => staged_records,
+            Err(error) => {
+                let _ = self.force_delete_branch_internal(branch_record.name());
+                return Err(error);
+            }
+        };
+
+        Ok(ImportStageResult::new(
+            branch_name,
+            staged_records,
+            staged_records > 0,
+        ))
+    }
+
+    fn shallow_clone(&self, destination: &Path) -> Result<CloneInfo, Self::Error> {
+        self.clone_store_internal(destination, CloneKind::Shallow)
+    }
+
+    fn deep_clone(&self, destination: &Path) -> Result<CloneInfo, Self::Error> {
+        self.clone_store_internal(destination, CloneKind::Deep)
     }
 }
 
@@ -1249,6 +1577,71 @@ fn decode_memory_records(payloads: Vec<String>) -> Result<Vec<MemoryRecord>, Lan
         .collect()
 }
 
+async fn table_contains_memory_id_async(
+    table: &Table,
+    id: &MemoryId,
+) -> Result<bool, LanceDbError> {
+    let mut stream = table
+        .query()
+        .select(Select::Columns(vec![PAYLOAD_COLUMN.to_owned()]))
+        .only_if(string_filter("id", id.as_str()))
+        .limit(1)
+        .execute()
+        .await?;
+
+    Ok(stream.try_next().await?.is_some())
+}
+
+fn memory_record_batch(record: &MemoryRecord) -> Result<(Arc<Schema>, RecordBatch), LanceDbError> {
+    let payload_json = serde_json::to_string(record)?;
+    let (created_secs, created_nanos) =
+        system_time_to_parts(record.created_at().value(), "created_at")?;
+    let (updated_secs, updated_nanos) =
+        system_time_to_parts(record.updated_at().value(), "updated_at")?;
+    let schema = memories_schema();
+    let batch = RecordBatch::try_new(
+        schema.clone(),
+        vec![
+            Arc::new(StringArray::from(vec![Some(record.id().as_str())])),
+            Arc::new(StringArray::from(vec![Some(record.scope_id().as_str())])),
+            Arc::new(StringArray::from(vec![Some(memory_kind_name(
+                record.kind(),
+            ))])),
+            Arc::new(StringArray::from(vec![Some(record.title())])),
+            Arc::new(StringArray::from(vec![Some(record.summary())])),
+            Arc::new(StringArray::from(vec![Some(record.detail())])),
+            Arc::new(StringArray::from(vec![Some(record.fts_text())])),
+            Arc::new(UInt32Array::from(vec![u32::from(
+                record.importance().value(),
+            )])),
+            Arc::new(UInt32Array::from(vec![u32::from(
+                record.confidence().value(),
+            )])),
+            Arc::new(UInt64Array::from(vec![created_secs])),
+            Arc::new(UInt32Array::from(vec![created_nanos])),
+            Arc::new(UInt64Array::from(vec![updated_secs])),
+            Arc::new(UInt32Array::from(vec![updated_nanos])),
+            Arc::new(BooleanArray::from(vec![record.pin_state().is_pinned()])),
+            Arc::new(StringArray::from(vec![Some(payload_json.as_str())])),
+        ],
+    )?;
+
+    Ok((schema, batch))
+}
+
+async fn insert_memory_record_async(
+    table: &Table,
+    record: &MemoryRecord,
+) -> Result<(), LanceDbError> {
+    let (schema, batch) = memory_record_batch(record)?;
+    let reader = Box::new(RecordBatchIterator::new(
+        vec![Ok(batch)].into_iter(),
+        schema,
+    ));
+    table.add(reader).execute().await?;
+    Ok(())
+}
+
 fn sort_memory_records(records: &mut [MemoryRecord]) {
     records.sort_by(|left, right| {
         right
@@ -1450,12 +1843,14 @@ mod tests {
 
     use tempfile::TempDir;
     use temporal_plane_core::{
-        CheckpointName, CheckpointSelector, CleanupMode, Confidence, DisclosureDepth, Importance,
-        OptimizeRequest, PreOperationCheckpointPolicy, QueryLimit, RecallQuery, RestoreRequest,
-        RetentionPolicy, ScopeId, SearchQuery, StatsQuery, TagName,
+        BranchName, BranchRequest, CheckpointName, CheckpointSelector, CleanupMode, CloneKind,
+        Confidence, DisclosureDepth, ImportStageRequest, Importance, OptimizeRequest,
+        PreOperationCheckpointPolicy, QueryLimit, RecallQuery, RestoreRequest, RetentionPolicy,
+        ScopeId, SearchQuery, StatsQuery, TagName,
         traits::{
-            CheckpointBackend, HistoryBackend, MemoryRepository, OptimizeBackend, PinningBackend,
-            RecallBackend, RestoreBackend, StatsBackend, StorageBackend,
+            AdvancedStorageBackend, CheckpointBackend, HistoryBackend, MemoryRepository,
+            OptimizeBackend, PinningBackend, RecallBackend, RestoreBackend, StatsBackend,
+            StorageBackend,
         },
     };
 
@@ -1526,6 +1921,27 @@ mod tests {
         (temp_dir, backend)
     }
 
+    fn branch_table(backend: &LanceDbBackend, branch: &BranchName) -> Table {
+        backend
+            .open_branch_memories_table(branch)
+            .expect("branch table should open")
+    }
+
+    fn branch_memory_ids(backend: &LanceDbBackend, branch: &BranchName) -> Vec<String> {
+        let table = branch_table(backend, branch);
+        let mut records = decode_memory_records(
+            backend
+                .query_payloads(&table, None, None, None)
+                .expect("branch payloads should query"),
+        )
+        .expect("branch records should decode");
+        sort_memory_records(&mut records);
+        records
+            .into_iter()
+            .map(|record| record.id().as_str().to_owned())
+            .collect()
+    }
+
     #[test]
     fn init_sets_schema_version() {
         let (_temp_dir, backend) = new_backend();
@@ -1541,6 +1957,17 @@ mod tests {
         let (_temp_dir, backend) = new_backend();
 
         assert!(backend.capabilities().supports_pinning());
+    }
+
+    #[test]
+    fn backend_advertises_advanced_storage_capabilities() {
+        let (_temp_dir, backend) = new_backend();
+
+        assert!(backend.capabilities().supports_branch_create());
+        assert!(backend.capabilities().supports_branch_list());
+        assert!(backend.capabilities().supports_import_staging());
+        assert!(backend.capabilities().supports_shallow_clone());
+        assert!(backend.capabilities().supports_deep_clone());
     }
 
     #[test]
@@ -1989,6 +2416,229 @@ mod tests {
             error,
             LanceDbError::DuplicateCheckpointVersion { .. }
         ));
+    }
+
+    #[test]
+    fn branch_create_list_and_delete_round_trip() {
+        let (_temp_dir, mut backend) = new_backend();
+        backend
+            .remember(build_memory(
+                "memory:branch-base",
+                "repo:temporal-plane",
+                "Branch base",
+                "Create a branch from this state.",
+            ))
+            .expect("memory should store");
+
+        let branch = backend
+            .create_branch(&BranchRequest::new(
+                BranchName::try_from("experiments/imports").expect("valid branch name"),
+            ))
+            .expect("branch should be created");
+        let branches = backend.list_branches().expect("branches should list");
+
+        assert_eq!(branch.name().as_str(), "experiments/imports");
+        assert_eq!(branches.len(), 1);
+        assert_eq!(
+            branches.branches()[0].name().as_str(),
+            "experiments/imports"
+        );
+
+        backend
+            .delete_branch(branch.name())
+            .expect("unchanged branch should delete");
+        assert!(
+            backend
+                .list_branches()
+                .expect("branches should list")
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn delete_branch_rejects_staged_changes() {
+        let (_temp_dir, mut backend) = new_backend();
+        backend
+            .remember(build_memory(
+                "memory:branch-delete-base",
+                "repo:temporal-plane",
+                "Branch delete base",
+                "Used to validate branch delete protection.",
+            ))
+            .expect("memory should store");
+        let branch = backend
+            .create_branch(&BranchRequest::new(
+                BranchName::try_from("experiments/dirty-branch").expect("valid branch name"),
+            ))
+            .expect("branch should be created");
+
+        let branch_table = branch_table(&backend, branch.name());
+        backend
+            .insert_memory_record(
+                &branch_table,
+                &build_memory(
+                    "memory:branch-only",
+                    "repo:temporal-plane",
+                    "Branch only",
+                    "Exists only on the experimental branch.",
+                ),
+            )
+            .expect("branch memory should insert");
+
+        let error = backend
+            .delete_branch(branch.name())
+            .expect_err("dirty branch should not delete");
+        assert!(matches!(error, LanceDbError::BranchHasChanges { .. }));
+    }
+
+    #[test]
+    fn staged_import_does_not_affect_main_branch() {
+        let (_source_dir, mut source) = new_backend();
+        source
+            .remember(build_memory(
+                "memory:import-source",
+                "repo:import-source",
+                "Imported memory",
+                "Should appear only on the staging branch.",
+            ))
+            .expect("source memory should store");
+
+        let (target_dir, mut target) = new_backend();
+        target
+            .remember(build_memory(
+                "memory:target-main",
+                "repo:temporal-plane",
+                "Target memory",
+                "Should remain on main.",
+            ))
+            .expect("target memory should store");
+
+        let staged = target
+            .stage_import(&ImportStageRequest::new(source.path()).with_branch_name(
+                BranchName::try_from("imports/source-a").expect("valid branch name"),
+            ))
+            .expect("import should stage");
+
+        assert_eq!(staged.branch_name().as_str(), "imports/source-a");
+        assert_eq!(staged.staged_records(), 1);
+        assert!(staged.ready_to_merge());
+        assert!(
+            target
+                .get(&MemoryId::try_from("memory:import-source").expect("valid id"))
+                .expect("lookup should succeed")
+                .is_none()
+        );
+
+        let staged_ids = branch_memory_ids(&target, staged.branch_name());
+        assert!(staged_ids.iter().any(|id| id == "memory:import-source"));
+        assert!(staged_ids.iter().any(|id| id == "memory:target-main"));
+        assert!(target_dir.path().exists());
+    }
+
+    #[test]
+    fn staged_import_rejects_missing_source_path() {
+        let (_temp_dir, mut backend) = new_backend();
+        let missing_path = std::env::temp_dir().join("temporal-plane-m7-missing-source-store");
+        if missing_path.exists() {
+            std::fs::remove_dir_all(&missing_path).expect("missing-path fixture should be removed");
+        }
+
+        let error = backend
+            .stage_import(&ImportStageRequest::new(&missing_path))
+            .expect_err("missing import source should fail");
+
+        assert!(matches!(
+            error,
+            LanceDbError::InvalidStorePath {
+                details: "store path does not exist",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn shallow_clone_produces_independent_workspace() {
+        let (_temp_dir, mut backend) = new_backend();
+        backend
+            .remember(build_memory(
+                "memory:clone-shallow",
+                "repo:temporal-plane",
+                "Shallow clone memory",
+                "Used to validate shallow clone flow.",
+            ))
+            .expect("memory should store");
+
+        let export_dir = TempDir::new().expect("tempdir should be created");
+        let clone_path = export_dir.path().join("shallow-clone-store");
+        let info = backend
+            .shallow_clone(&clone_path)
+            .expect("shallow clone should succeed");
+
+        assert_eq!(info.kind(), CloneKind::Shallow);
+        assert!(info.version_count() > 0);
+
+        let mut cloned = LanceDbBackend::open(&clone_path).expect("cloned store should open");
+        cloned
+            .remember(build_memory(
+                "memory:clone-only",
+                "repo:temporal-plane",
+                "Clone only",
+                "This should not alter the source store.",
+            ))
+            .expect("clone memory should store");
+
+        assert!(
+            backend
+                .get(&MemoryId::try_from("memory:clone-only").expect("valid id"))
+                .expect("lookup should succeed")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn deep_clone_preserves_version_count() {
+        let (_temp_dir, mut backend) = new_backend();
+        backend
+            .remember(build_memory(
+                "memory:clone-deep-a",
+                "repo:temporal-plane",
+                "Deep clone A",
+                "Create one historical version.",
+            ))
+            .expect("memory should store");
+        backend
+            .remember(build_memory(
+                "memory:clone-deep-b",
+                "repo:temporal-plane",
+                "Deep clone B",
+                "Create a second historical version.",
+            ))
+            .expect("memory should store");
+
+        let export_dir = TempDir::new().expect("tempdir should be created");
+        let clone_path = export_dir.path().join("deep-clone-store");
+        let info = backend
+            .deep_clone(&clone_path)
+            .expect("deep clone should succeed");
+
+        assert_eq!(info.kind(), CloneKind::Deep);
+        assert!(info.version_count() >= 2);
+
+        let cloned = LanceDbBackend::open(&clone_path).expect("deep clone should open");
+        let source_history = backend
+            .history(&HistoryQuery::new(
+                None,
+                QueryLimit::new(20).expect("valid limit"),
+            ))
+            .expect("source history should load");
+        let cloned_history = cloned
+            .history(&HistoryQuery::new(
+                None,
+                QueryLimit::new(20).expect("valid limit"),
+            ))
+            .expect("cloned history should load");
+
+        assert_eq!(cloned_history.len(), source_history.len());
     }
 
     #[test]

@@ -3,6 +3,7 @@
 use arrow_array as _;
 use arrow_schema as _;
 use futures as _;
+use lance as _;
 use lance_index as _;
 use lancedb as _;
 use serde_json as _;

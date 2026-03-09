@@ -239,6 +239,8 @@ Lance now supports Git-style branching at the dataset layer.
 
 Temporal Plane should not ignore this in the architecture, even if branch UX is deferred.
 
+See also: [docs/branch-lifecycle.md](branch-lifecycle.md).
+
 The internal design should assume future support for:
 
 - alternate memory timelines

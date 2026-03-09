@@ -52,6 +52,15 @@ pub enum CoreError {
         character: char,
     },
 
+    /// A field used a reserved value that is not allowed by the domain model.
+    #[error("field `{field}` uses reserved value `{value}`")]
+    ReservedValue {
+        /// The invalid field name.
+        field: &'static str,
+        /// The reserved value that was rejected.
+        value: String,
+    },
+
     /// A backend capability was requested from an unsupported storage layer.
     #[error("backend capability `{capability}` is not available")]
     CapabilityUnavailable {
