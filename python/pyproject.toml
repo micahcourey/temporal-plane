@@ -5,12 +5,32 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "temporal-plane"
 version = "0.1.0"
-description = "Python binding scaffold for Temporal Plane"
+description = "Python binding for Temporal Plane — a local-first memory layer for AI coding agents"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "Micah Courey" }]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-mock>=3.12",
+]
 
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["temporal_plane*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]

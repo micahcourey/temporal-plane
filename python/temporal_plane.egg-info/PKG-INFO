@@ -1,3 +1,21 @@
+Metadata-Version: 2.4
+Name: temporal-plane
+Version: 0.1.0
+Summary: Python binding for Temporal Plane — a local-first memory layer for AI coding agents
+Author: Micah Courey
+License: MIT
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+Provides-Extra: dev
+Requires-Dist: pytest>=8.0; extra == "dev"
+Requires-Dist: pytest-mock>=3.12; extra == "dev"
+
 # Temporal Plane Python Binding
 
 A thin, typed Python client for [Temporal Plane](../README.md) — a local-first
