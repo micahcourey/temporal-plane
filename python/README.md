@@ -9,9 +9,11 @@ wraps its `--json` output surface; no core behavior is duplicated here.
 ## Requirements
 
 - Python 3.11 or later
-- The `temporal-plane` binary on `PATH` (install from the workspace root via
-  `cargo install --path crates/temporal-plane-cli`) or set
-  `TP_BINARY=/path/to/temporal-plane`
+- On supported platforms, the published wheel bundles the `temporal-plane`
+    binary automatically
+- On unsupported platforms or source installs, install the CLI separately via
+    `cargo install --path crates/temporal-plane-cli` or set
+    `TP_BINARY=/path/to/temporal-plane`
 
 ## Installation
 
@@ -21,9 +23,12 @@ Install the Python wrapper from PyPI:
 pip install temporal-plane
 ```
 
-The package does not bundle the Rust CLI binary. Install the CLI separately and
-ensure `temporal-plane` is on `PATH`, or set `TP_BINARY` to an explicit binary
-path.
+On supported platforms, this wheel includes the Rust `temporal-plane` CLI
+binary and should work without any additional setup.
+
+If no bundled wheel is available for your platform, install the CLI separately
+and ensure `temporal-plane` is on `PATH`, or set `TP_BINARY` to an explicit
+binary path.
 
 ## Installation (development)
 

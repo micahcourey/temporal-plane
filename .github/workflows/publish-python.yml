@@ -3,6 +3,7 @@ name: Publish Python
 on:
   release:
     types: [published]
+  workflow_dispatch:
 
 jobs:
   test:
@@ -24,13 +25,10 @@ jobs:
         working-directory: python
         run: pytest
 
-  publish:
-    name: Publish to PyPI
+  build-sdist:
+    name: Build source distribution
     needs: test
     runs-on: ubuntu-latest
-    environment: pypi
-    permissions:
-      id-token: write  # required for OIDC trusted publishing
 
     steps:
       - uses: actions/checkout@v4
@@ -43,15 +41,99 @@ jobs:
       - name: Install build
         run: pip install build twine
 
-      - name: Build package
+      - name: Build source distribution
         working-directory: python
-        run: python -m build
+        run: python -m build --sdist
 
       - name: Validate package metadata
         working-directory: python
         run: python -m twine check --strict dist/*
 
+      - name: Upload source distribution
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-sdist
+          path: python/dist/*.tar.gz
+
+  build-bundled-wheels:
+    name: Build bundled wheel (${{ matrix.label }})
+    needs: test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: linux-x86_64
+            cli_binary: target/release/temporal-plane
+          - os: macos-latest
+            label: macos-arm64
+            cli_binary: target/release/temporal-plane
+          - os: windows-latest
+            label: windows-x86_64
+            cli_binary: target/release/temporal-plane.exe
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build CLI release binary
+        run: cargo build --release -p temporal-plane-cli
+
+      - name: Build and verify bundled wheel
+        shell: bash
+        env:
+          PYTHON_BIN: python
+          TP_CLI_BINARY: ${{ matrix.cli_binary }}
+        run: ./scripts/check-python-bundled-wheel.sh
+
+      - name: Upload bundled wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-wheel-${{ matrix.label }}
+          path: python/dist/*.whl
+
+  publish:
+    name: Publish to PyPI
+    needs:
+      - build-sdist
+      - build-bundled-wheels
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write  # required for OIDC trusted publishing
+
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: python-*
+          path: dist
+          merge-multiple: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install twine
+        run: pip install twine
+
+      - name: Validate all artifacts
+        run: python -m twine check --strict dist/*
+
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          packages-dir: python/dist/
+          packages-dir: dist/
