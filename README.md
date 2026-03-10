@@ -6,12 +6,13 @@
 %%{init: {
   "theme": "base",
   "themeVariables": {
-    "primaryTextColor": "#e6edf3",
-    "primaryColor": "#333336",
-    "primaryBorderColor": "#388bfd",
-    "lineColor": "#8b949e",
-    "secondaryColor": "#238636",
-    "tertiaryColor": "#8957e5"
+    "background": "#ffffff",
+    "primaryTextColor": "#24292f",
+    "primaryColor": "#f6f8fa",
+    "primaryBorderColor": "#0969da",
+    "lineColor": "#57606a",
+    "secondaryColor": "#ddf4ff",
+    "tertiaryColor": "#d8f5d0"
   }
 }}%%
 mindmap
