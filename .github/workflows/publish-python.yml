@@ -84,6 +84,11 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Set up protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          version: '27.3'
+
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
 
