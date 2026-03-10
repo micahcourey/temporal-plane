@@ -3,6 +3,17 @@
 > A lightweight, inspectable, local-first memory engine for AI coding agents — with built-in version history and time-travel.
 
 ```mermaid
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "primaryTextColor": "#e6edf3",
+    "primaryColor": "#333336",
+    "primaryBorderColor": "#388bfd",
+    "lineColor": "#8b949e",
+    "secondaryColor": "#238636",
+    "tertiaryColor": "#8957e5"
+  }
+}}%%
 mindmap
   root((🧠 Temporal Plane))
     📝 Remember
