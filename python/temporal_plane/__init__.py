@@ -29,6 +29,7 @@ from .errors import (
     TemporalPlaneDecodeError,
     TemporalPlaneError,
 )
+from ._version import __version__
 from .models import (
     CheckpointRequest,
     CheckpointResult,
@@ -49,8 +50,6 @@ from .models import (
     StoreStats,
     VersionRecord,
 )
-
-__version__ = "0.1.0"
 
 __all__ = [
     "TemporalPlane",
