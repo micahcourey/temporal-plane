@@ -4,26 +4,39 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "temporal-plane"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Python binding for Temporal Plane — a local-first memory layer for AI coding agents"
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "MIT" }
+license = "MIT"
 authors = [{ name = "Micah Courey" }]
+keywords = ["ai", "memory", "lancedb", "cli", "agent-tools"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]
+
+[project.urls]
+Homepage = "https://github.com/micahcourey/temporal-plane"
+Repository = "https://github.com/micahcourey/temporal-plane"
+Issues = "https://github.com/micahcourey/temporal-plane/issues"
+Changelog = "https://github.com/micahcourey/temporal-plane/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
     "pytest-mock>=3.12",
 ]
+release = [
+    "build>=1.2",
+    "twine>=5.1",
+]
+
+[tool.setuptools.dynamic]
+version = { attr = "temporal_plane._version.__version__" }
 
 [tool.setuptools.packages.find]
 where = ["."]
