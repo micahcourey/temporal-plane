@@ -1,14 +1,14 @@
-# temporal-plane — Domain Glossary
+# mnemix — Domain Glossary
 
 > The structured glossary is in [glossary.jsonl](glossary.jsonl). Several extracted terms still need maintainer review.
 
 ## Overview
 
-Temporal Plane vocabulary combines product terms from the planning docs with storage terminology from LanceDB and Lance.
+Mnemix vocabulary combines product terms from the planning docs with storage terminology from LanceDB and Lance.
 
 ## Core Terms
 
-- **Temporal Plane** — the product itself
+- **Mnemix** — the product itself
 - **memory record** — durable stored memory unit
 - **pin** — memory favored during retrieval
 - **archival memory** — deeper memory fetched on demand
@@ -22,6 +22,6 @@ Terms marked `needs_review: true` in [glossary.jsonl](glossary.jsonl) were extra
 
 ## Sources
 
-- `docs/temporal-plane-plan-v3.md`
-- `docs/temporal-plane-roadmap.md`
+- `docs/mnemix-plan-v3.md`
+- `docs/mnemix-roadmap.md`
 - `docs/lancedb-rust-sdk-agent-guide.md`

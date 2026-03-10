@@ -1,14 +1,14 @@
-# Example: AI DX Toolkit Adapter
+# Example: AI DX Toolkit Adapter for Mnemix
 
-This example shows how to use the AI DX Toolkit Temporal Plane adapter to record
+This example shows how to use the AI DX Toolkit Mnemix adapter to record
 agent memory events and retrieve layered context.
 
 ## Prerequisites
 
 - The `tp` binary on `PATH` (build with `cargo build --release`)
 - Python 3.11+
-- `temporal-plane` installed: `cd python && pip install -e .`
-- The adapter module: available at `adapters/ai-dx-toolkit/temporal_plane_adapter.py`
+- `mnemix` installed: `cd python && pip install -e .`
+- The adapter module: available at `adapters/ai-dx-toolkit/mnemix_adapter.py`
 
 ## Running the Example
 
@@ -30,10 +30,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "adapters" / "ai-dx-toolkit"))
 
-from temporal_plane_adapter import TemporalPlaneAdapter
+from mnemix_adapter import MnemixAdapter
 
-store = Path("/tmp/tp-adapter-example")
-adapter = TemporalPlaneAdapter(store=store)
+store = Path("/tmp/mnemix-adapter-example")
+adapter = MnemixAdapter(store=store)
 
 # Initialise
 adapter.ensure_store()
@@ -92,7 +92,7 @@ Memories: 2, pinned: 1
 
 ## Design Notes
 
-- The adapter depends only on the `temporal_plane` public Python API.
+- The adapter depends only on the `mnemix` public Python API.
 - No LanceDB-specific assumptions are made in the adapter layer.
 - Pinned decisions appear in `pinned_context` and are favored in recall.
 - Checkpoints created before bulk operations enable safe restore if needed.

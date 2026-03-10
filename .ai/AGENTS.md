@@ -1,11 +1,11 @@
-# temporal-plane — AI Coding Instructions
+# mnemix — AI Coding Instructions
 
 > Canonical project instructions for generated AI toolkit resources.
 > Read only the modules needed for the current task.
 
 ## Project Overview
 
-Temporal Plane is a standalone, local-first memory layer for AI coding agents and related tooling.
+Mnemix is a standalone, local-first memory layer for AI coding agents and related tooling.
 
 Current repo status:
 
@@ -16,18 +16,18 @@ Current repo status:
 
 ## Always-Know Rules
 
-1. Keep `temporal-plane-core` storage-agnostic.
-2. Keep LanceDB and Lance details inside `temporal-plane-lancedb`.
+1. Keep `mnemix-core` storage-agnostic.
+2. Keep LanceDB and Lance details inside `mnemix-lancedb`.
 3. Treat Python as a wrapper layer, not a second implementation.
 4. Use Dex for multi-step work and record verification in task results.
 5. Do not invent frontend, web API, or compliance workflows that do not exist here.
 
 ## Canonical Project Docs
 
-- [../docs/temporal-plane-plan-v3.md](../docs/temporal-plane-plan-v3.md)
-- [../docs/temporal-plane-roadmap.md](../docs/temporal-plane-roadmap.md)
+- [../docs/mnemix-plan-v3.md](../docs/mnemix-plan-v3.md)
+- [../docs/mnemix-roadmap.md](../docs/mnemix-roadmap.md)
 - [../docs/lancedb-rust-sdk-agent-guide.md](../docs/lancedb-rust-sdk-agent-guide.md)
-- [../docs/temporal-plane-coding-guidelines.md](../docs/temporal-plane-coding-guidelines.md)
+- [../docs/mnemix-coding-guidelines.md](../docs/mnemix-coding-guidelines.md)
 - [../docs/git-workflow.md](../docs/git-workflow.md)
 
 ## Instructions — Load When Needed
@@ -47,7 +47,7 @@ Current repo status:
 | Understand crates, adapters, and planned data flow | [context/System_Architecture.md](context/System_Architecture.md) |
 | Check implemented vs planned storage schema | [context/Database_Schema.md](context/Database_Schema.md) + [context/schema.yaml](context/schema.yaml) |
 | Understand repo layout and notable roots | [context/Repository_Index.md](context/Repository_Index.md) + [context/repositories.jsonl](context/repositories.jsonl) |
-| Look up Temporal Plane terms | [context/Domain_Glossary.md](context/Domain_Glossary.md) + [context/glossary.jsonl](context/glossary.jsonl) |
+| Look up Mnemix terms | [context/Domain_Glossary.md](context/Domain_Glossary.md) + [context/glossary.jsonl](context/glossary.jsonl) |
 | Review repo verification strategy | [context/Testing_Strategy.md](context/Testing_Strategy.md) |
 | Review active and planned integrations | [context/Third_Party_Integrations.md](context/Third_Party_Integrations.md) |
 
@@ -66,9 +66,9 @@ Current repo status:
 
 ## Scope Notes
 
-- The optional toolkit Temporal Plane integration is intentionally disabled.
+- The optional toolkit Mnemix integration is intentionally disabled.
 - The compliance agent and compliance instruction module are intentionally omitted.
 - N/A context files for auth, roles, and API routes were removed to keep this repo lean.
 
 **Last Updated**: 2026-03-08
-**Workspace**: temporal-plane
+**Workspace**: mnemix

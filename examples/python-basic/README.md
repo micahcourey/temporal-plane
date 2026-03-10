@@ -1,12 +1,12 @@
 # Example: Basic Python Usage
 
-This example shows the minimal end-to-end flow for using Temporal Plane from Python.
+This example shows the minimal end-to-end flow for using Mnemix from Python.
 
 ## Prerequisites
 
 - The `tp` binary on `PATH` (build with `cargo build --release` from the workspace root)
 - Python 3.11+
-- `temporal-plane` package installed: `cd python && pip install -e .`
+- `mnemix` package installed: `cd python && pip install -e .`
 
 ## Running the Example
 
@@ -23,12 +23,12 @@ python example.py
 
 ```python
 from pathlib import Path
-from temporal_plane import TemporalPlane, RememberRequest
-from temporal_plane.models import CheckpointRequest
+from mnemix import Mnemix, RememberRequest
+from mnemix.models import CheckpointRequest
 
 # Point to a temporary store for this example
-store = Path("/tmp/tp-python-basic-example")
-tp = TemporalPlane(store=store)
+store = Path("/tmp/mnemix-python-basic-example")
+tp = Mnemix(store=store)
 
 # 1. Initialise the store
 tp.init()

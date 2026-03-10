@@ -12,7 +12,7 @@ This example demonstrates the advanced storage workflow added in Milestone 7:
 Run it with:
 
 ```text
-cargo run -p temporal-plane-lancedb --example branch-experiment
+cargo run -p mnemix-lancedb --example branch-experiment
 ```
 
 The example uses the public `AdvancedStorageBackend` trait and keeps all branch behavior marked as advanced.

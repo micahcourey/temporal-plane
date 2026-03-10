@@ -74,7 +74,7 @@ This skill activates when:
 
 ## Project Patterns
 
-[Specific temporal-plane conventions to follow]
+[Specific mnemix conventions to follow]
 ```
 
 ## Task

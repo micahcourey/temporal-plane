@@ -1,4 +1,4 @@
-# temporal-plane — Third-Party Integrations
+# mnemix — Third-Party Integrations
 
 ## Active Developer/CI Integrations
 
@@ -26,6 +26,6 @@ None detected.
 ## Sources
 
 - `.github/workflows/ci.yml`
-- `docs/temporal-plane-plan-v3.md`
+- `docs/mnemix-plan-v3.md`
 - `docs/lancedb-rust-sdk-agent-guide.md`
 <!-- The bootstrap agent will populate this -->

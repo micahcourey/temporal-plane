@@ -1,4 +1,4 @@
-# temporal-plane — Testing Strategy
+# mnemix — Testing Strategy
 
 ## Overview
 
@@ -28,5 +28,5 @@ Coverage target for new code: `90%`.
 ## Sources
 
 - `.github/workflows/ci.yml`
-- `docs/temporal-plane-coding-guidelines.md`
-- `docs/temporal-plane-roadmap.md`
+- `docs/mnemix-coding-guidelines.md`
+- `docs/mnemix-roadmap.md`

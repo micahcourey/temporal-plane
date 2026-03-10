@@ -1,6 +1,6 @@
 # Coding Standards
 
-> Project-specific coding rules for Temporal Plane.
+> Project-specific coding rules for Mnemix.
 
 ## Architectural Priorities
 
@@ -12,7 +12,7 @@
 
 ## Boundary Rules
 
-### `temporal-plane-core`
+### `mnemix-core`
 
 Owns product semantics only:
 
@@ -30,7 +30,7 @@ Must not expose:
 - CLI rendering concerns
 - Python binding glue
 
-### `temporal-plane-lancedb`
+### `mnemix-lancedb`
 
 Owns backend mechanics:
 
@@ -40,7 +40,7 @@ Owns backend mechanics:
 - indexing
 - version and tag plumbing
 
-### `temporal-plane-cli`
+### `mnemix-cli`
 
 Owns command parsing, human-readable output, JSON output mode, and binary-boundary error aggregation.
 
@@ -69,6 +69,6 @@ Finish substantive work with:
 
 ## Sources
 
-- `docs/temporal-plane-coding-guidelines.md`
-- `docs/temporal-plane-roadmap.md`
-- `docs/temporal-plane-plan-v3.md`
+- `docs/mnemix-coding-guidelines.md`
+- `docs/mnemix-roadmap.md`
+- `docs/mnemix-plan-v3.md`

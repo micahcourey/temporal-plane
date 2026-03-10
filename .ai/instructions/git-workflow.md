@@ -1,6 +1,6 @@
 # Git Workflow
 
-> Temporal Plane uses Dex and git worktrees by default.
+> Mnemix uses Dex and git worktrees by default.
 
 ## Default Workflow
 

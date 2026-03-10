@@ -1,4 +1,4 @@
-# temporal-plane — Database Schema Overview
+# mnemix — Database Schema Overview
 
 > No implemented storage schema was detected yet. `schema.yaml` records the planned storage layers so agents can distinguish planned structure from implemented tables.
 
@@ -17,6 +17,6 @@
 
 ## Sources
 
-- `docs/temporal-plane-plan-v3.md`
-- `docs/temporal-plane-roadmap.md`
+- `docs/mnemix-plan-v3.md`
+- `docs/mnemix-roadmap.md`
 - `docs/lancedb-rust-sdk-agent-guide.md`

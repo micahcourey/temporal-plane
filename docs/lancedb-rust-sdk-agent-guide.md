@@ -1,19 +1,19 @@
 # LanceDB + Lance Rust SDK Agent Guide
 
-> Internal research guide for Temporal Plane planning.
+> Internal research guide for Mnemix planning.
 
-**Purpose:** document what LanceDB and the lower-level Lance Rust SDK can realistically provide for Temporal Plane, with emphasis on local-first usage, time-travel, tags, branching, and operational caveats.
+**Purpose:** document what LanceDB and the lower-level Lance Rust SDK can realistically provide for Mnemix, with emphasis on local-first usage, time-travel, tags, branching, and operational caveats.
 
 ---
 
 ## 1. Executive Summary
 
-Rust is a viable primary backend interface for Temporal Plane.
+Rust is a viable primary backend interface for Mnemix.
 
 The strongest conclusion from the research is:
 
-- `lancedb` in Rust is sufficient for the core local database lifecycle Temporal Plane needs.
-- `lance` adds the lower-level dataset and version-control primitives that matter for advanced Temporal Plane workflows.
+- `lancedb` in Rust is sufficient for the core local database lifecycle Mnemix needs.
+- `lance` adds the lower-level dataset and version-control primitives that matter for advanced Mnemix workflows.
 - Rust is strongest when the design is:
   - local-first,
   - async-friendly,
@@ -23,7 +23,7 @@ The strongest conclusion from the research is:
 
 ### Planning conclusion
 
-For Temporal Plane:
+For Mnemix:
 
 - **Use Rust as the primary implementation language.**
 - **Use `lancedb` for most application-level storage workflows.**
@@ -59,9 +59,9 @@ Lower-level dataset control layer:
 - lower-level cleanup and metadata operations
 - more storage-aware and less convenience-oriented APIs
 
-### Temporal Plane implication
+### Mnemix implication
 
-Temporal Plane should not assume one crate covers all needs elegantly.
+Mnemix should not assume one crate covers all needs elegantly.
 
 The best design is likely:
 
@@ -70,7 +70,7 @@ The best design is likely:
 
 ---
 
-## 3. Why LanceDB Fits Temporal Plane
+## 3. Why LanceDB Fits Mnemix
 
 LanceDB/Lance aligns strongly with the product goals:
 
@@ -82,7 +82,7 @@ LanceDB/Lance aligns strongly with the product goals:
 - **explicit restore, checkout, and tags**
 - **direct object storage support later if needed**
 
-For Temporal Plane, this means the storage substrate already provides:
+For Mnemix, this means the storage substrate already provides:
 
 - time-travel,
 - auditability,
@@ -110,7 +110,7 @@ For Temporal Plane, this means the storage substrate already provides:
 | Vector indexes | Supported | IVF and HNSW family variants available |
 | Hybrid search | Supported with caveats | Less polished ergonomically than Python docs imply |
 | Versioning | Supported | Read version, list versions, checkout, restore |
-| Tags/checkpoints | Supported | Strong fit for Temporal Plane milestones |
+| Tags/checkpoints | Supported | Strong fit for Mnemix milestones |
 | Branching | Supported at lower level | More naturally a `lance` concern than casual `lancedb` workflow |
 | Shallow clone | Supported at lower level | Advanced but highly relevant |
 | Deep clone | Supported at lower level | Useful for archival/export workflows |
@@ -123,7 +123,7 @@ For Temporal Plane, this means the storage substrate already provides:
 
 ## 5. Local-First Usage
 
-Temporal Plane is explicitly local-first, and LanceDB fits that very well.
+Mnemix is explicitly local-first, and LanceDB fits that very well.
 
 ### What the stack supports
 
@@ -135,7 +135,7 @@ Temporal Plane is explicitly local-first, and LanceDB fits that very well.
 
 ### Why this matters
 
-Temporal Plane should treat local datasets as the default source of truth for:
+Mnemix should treat local datasets as the default source of truth for:
 
 - development use
 - local agent sessions
@@ -238,7 +238,7 @@ Important concepts include:
 
 ## 7. Full-Text Search
 
-Full-text search is highly relevant to Temporal Plane because v1 is text-first.
+Full-text search is highly relevant to Mnemix because v1 is text-first.
 
 ### What matters
 
@@ -255,7 +255,7 @@ This is a strong fit for:
 
 ### Planning implication
 
-Temporal Plane should plan around:
+Mnemix should plan around:
 
 - a denormalized `fts_text` field
 - FTS for lexical retrieval
@@ -270,7 +270,7 @@ Do not assume the Rust FTS ergonomics exactly match Python examples. The capabil
 
 ## 8. Indexing Model
 
-Temporal Plane will depend heavily on indexing quality for practical local performance.
+Mnemix will depend heavily on indexing quality for practical local performance.
 
 ### Relevant index types
 
@@ -284,7 +284,7 @@ Research surfaced support for:
 
 ### Planning implication
 
-For Temporal Plane, the most likely early-value indexes are:
+For Mnemix, the most likely early-value indexes are:
 
 - FTS on searchable text
 - scalar index on session/scope/category/importance/timestamps
@@ -294,7 +294,7 @@ For Temporal Plane, the most likely early-value indexes are:
 
 Indexes are an explicit maintenance concern.
 
-New data may not be fully represented in optimized indexes until maintenance runs. So Temporal Plane must treat index optimization as a product-level operational feature, not a hidden implementation detail.
+New data may not be fully represented in optimized indexes until maintenance runs. So Mnemix must treat index optimization as a product-level operational feature, not a hidden implementation detail.
 
 ---
 
@@ -310,9 +310,9 @@ This is one of the strongest reasons to use Lance.
 - `checkout_latest` returns to current head state
 - `restore` creates a new version equivalent to the restored snapshot
 
-### Why this matters to Temporal Plane
+### Why this matters to Mnemix
 
-Temporal Plane needs to support:
+Mnemix needs to support:
 
 - reproducible memory state
 - auditability
@@ -328,13 +328,13 @@ Versioning is not just a backend feature. It should be treated as a user-facing 
 
 ## 10. Tags as First-Class Checkpoints
 
-Tags are one of the best immediate fits for Temporal Plane.
+Tags are one of the best immediate fits for Mnemix.
 
 ### Why tags matter
 
 Tags are the cleanest way to create stable, human-readable references to meaningful memory states.
 
-### Recommended Temporal Plane uses
+### Recommended Mnemix uses
 
 - `bootstrap`
 - `pre_import`
@@ -346,7 +346,7 @@ Tags are the cleanest way to create stable, human-readable references to meaning
 
 ### Planning implication
 
-For Temporal Plane:
+For Mnemix:
 
 - tags should be a first-class user concept
 - checkpoint UX should be built on tags
@@ -356,9 +356,9 @@ For Temporal Plane:
 
 ## 11. Branching
 
-Branching is one of the most important newer Lance capabilities for future Temporal Plane design.
+Branching is one of the most important newer Lance capabilities for future Mnemix design.
 
-See [docs/branch-lifecycle.md](branch-lifecycle.md) for the current Temporal Plane lifecycle policy layered on top of these storage primitives.
+See [docs/branch-lifecycle.md](branch-lifecycle.md) for the current Mnemix lifecycle policy layered on top of these storage primitives.
 
 ### What the new Lance model provides
 
@@ -367,9 +367,9 @@ See [docs/branch-lifecycle.md](branch-lifecycle.md) for the current Temporal Pla
 - better isolation than older shared-metadata branch models
 - full time travel within branches
 
-### Why it is relevant to Temporal Plane
+### Why it is relevant to Mnemix
 
-Potential Temporal Plane branch use cases include:
+Potential Mnemix branch use cases include:
 
 - alternate pinning strategies
 - cleanup experiments
@@ -385,7 +385,7 @@ Research indicates branch creation should be treated carefully and may require c
 
 ### Planning implication
 
-Temporal Plane should:
+Mnemix should:
 
 - be branch-aware in the architecture
 - not require branch UX in v1
@@ -418,7 +418,7 @@ Useful for:
 
 ### Planning implication
 
-Temporal Plane should likely distinguish two concepts later:
+Mnemix should likely distinguish two concepts later:
 
 - cheap derived working copies
 - durable fully owned copies
@@ -444,9 +444,9 @@ Optimization and cleanup can:
 
 Once old versions are cleaned up, recoverability can be reduced or lost.
 
-### Temporal Plane implication
+### Mnemix implication
 
-Temporal Plane needs explicit retention tiers, such as:
+Mnemix needs explicit retention tiers, such as:
 
 - disposable working history
 - protected tagged milestones
@@ -473,7 +473,7 @@ LanceDB/Lance can support a product that evolves over time.
 
 ### Planning implication
 
-Temporal Plane can evolve its schema without rebuilding from scratch all the time, but maintenance and migration planning still matter.
+Mnemix can evolve its schema without rebuilding from scratch all the time, but maintenance and migration planning still matter.
 
 This is useful for:
 
@@ -486,11 +486,11 @@ This is useful for:
 
 ## 15. Query Model
 
-Rust support is sufficient for Temporal Plane’s likely query model.
+Rust support is sufficient for Mnemix’s likely query model.
 
 ### Likely retrieval layers
 
-Temporal Plane can build layered retrieval on top of:
+Mnemix can build layered retrieval on top of:
 
 - scalar filters
 - FTS
@@ -499,7 +499,7 @@ Temporal Plane can build layered retrieval on top of:
 
 ### Planning implication
 
-Temporal Plane should define its own retrieval contract in the core instead of leaking raw SDK differences upward.
+Mnemix should define its own retrieval contract in the core instead of leaking raw SDK differences upward.
 
 ---
 
@@ -536,7 +536,7 @@ Research found that not all native/local and remote/cloud table behaviors are id
 
 ### Why this matters
 
-Temporal Plane is local-first, so this is not a blocker.
+Mnemix is local-first, so this is not a blocker.
 
 But if remote support is added later, the product should not assume all operations behave exactly the same across environments.
 
@@ -546,7 +546,7 @@ Use local/native behavior as the baseline contract for v1.
 
 ---
 
-## 18. Temporal Plane Planning Recommendations
+## 18. Mnemix Planning Recommendations
 
 ### Strong recommendations
 
@@ -599,7 +599,7 @@ High-value sources for ongoing validation:
 
 ## 21. Bottom-Line Recommendation
 
-Temporal Plane should adopt LanceDB + Lance Rust SDK as a local-first, version-aware storage foundation.
+Mnemix should adopt LanceDB + Lance Rust SDK as a local-first, version-aware storage foundation.
 
 The right planning stance is:
 
@@ -610,4 +610,4 @@ The right planning stance is:
 
 And most importantly:
 
-**Versioning, tags, and historical inspection should be treated as core Temporal Plane capabilities, not incidental backend details.**
+**Versioning, tags, and historical inspection should be treated as core Mnemix capabilities, not incidental backend details.**

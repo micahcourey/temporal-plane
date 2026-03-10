@@ -1,6 +1,6 @@
 # Production Readiness Review (PRR)
 
-Initial public PyPI release plan for the `temporal-plane` Python wrapper. This release ships the thin Python client, preserves Rust as the source of truth, and publishes through GitHub Actions trusted publishing after local packaging validation and release-tag verification.
+Initial public PyPI release plan for the `mnemix` Python wrapper. This release ships the thin Python client, preserves Rust as the source of truth, and publishes through GitHub Actions trusted publishing after local packaging validation and release-tag verification.
 
 ---
 
@@ -16,7 +16,7 @@ Initial public PyPI release plan for the `temporal-plane` Python wrapper. This r
 
 ## Release Scope
 
-This release publishes the first installable Python package for Temporal Plane. Scope includes the existing Python wrapper, packaging metadata hardening, release validation, and trusted publishing through the repository release workflow.
+This release publishes the first installable Python package for Mnemix. Scope includes the existing Python wrapper, packaging metadata hardening, release validation, and trusted publishing through the repository release workflow.
 
 | Ticket | Summary | Status |
 |--------|---------|--------|
@@ -40,14 +40,14 @@ UAT for this release focuses on packaging and installability rather than new pro
 |---------------|-----------|--------|
 | Build sdist and wheel locally | Maintainer | Pass |
 | Install built wheel in a clean virtual environment | Maintainer | Pass |
-| Import `temporal_plane` and read `__version__` | Maintainer | Pass |
-| Confirm missing binary raises `TemporalPlaneBinaryNotFoundError` | Maintainer | Pass |
+| Import `mnemix` and read `__version__` | Maintainer | Pass |
+| Confirm missing binary raises `MnemixBinaryNotFoundError` | Maintainer | Pass |
 
 ## Release Known Issues
 
 | Issue | Severity | Impact | Planned Fix |
 |-------|----------|--------|-------------|
-| The PyPI package does not bundle the Rust `temporal-plane` CLI binary | Medium | Users must install the CLI separately or set `TP_BINARY` | Document clearly in the package README and revisit if a bundled distribution is introduced |
+| The PyPI package does not bundle the Rust `mnemix` CLI binary | Medium | Users must install the CLI separately or set `MNEMIX_BINARY` | Document clearly in the package README and revisit if a bundled distribution is introduced |
 | GitHub Release publishing depends on PyPI trusted publisher setup in the `pypi` environment | Low | Release automation will fail until trust is configured | Complete repository and PyPI setup before the first live publish |
 
 ## Release Test Results
@@ -74,7 +74,7 @@ Release verification for this package is primarily automated through Python test
 
 - [ ] PyPI trusted publisher added for `.github/workflows/publish-python.yml`
 - [ ] GitHub `pypi` environment created with desired protections
-- [ ] Python version updated in `python/temporal_plane/_version.py`
+- [ ] Python version updated in `python/mnemix/_version.py`
 - [x] Local package validation completed with `./scripts/check-python-package.sh`
 - [ ] GitHub Release created from a clean, verified tag
 - [ ] Publish workflow completes successfully
@@ -82,9 +82,9 @@ Release verification for this package is primarily automated through Python test
 
 ## Production Post-Deployment Verification
 
-- [ ] `pip install temporal-plane` succeeds from PyPI
-- [ ] `import temporal_plane` succeeds in a clean virtual environment
-- [ ] `temporal_plane.__version__` matches the published version
+- [ ] `pip install mnemix` succeeds from PyPI
+- [ ] `import mnemix` succeeds in a clean virtual environment
+- [ ] `mnemix.__version__` matches the published version
 - [ ] README on PyPI clearly documents the external CLI requirement
 - [ ] A basic client invocation fails cleanly with actionable guidance when the CLI is absent
 - [ ] Maintainer records release outcome and any follow-up fixes
@@ -100,4 +100,4 @@ Release verification for this package is primarily automated through Python test
 
 ## Notes & Miscellaneous Items
 
-The live publish path is already implemented in [.github/workflows/publish-python.yml](../.github/workflows/publish-python.yml). The release trigger is a published GitHub Release, not a plain tag push. Local release preflight is standardized in [scripts/check-python-package.sh](../scripts/check-python-package.sh). Version metadata is now single-sourced from `python/temporal_plane/_version.py` so the package metadata and runtime version stay aligned. Local verification completed on 2026-03-09: 56 Python tests passed, sdist and wheel builds succeeded, `twine check` passed, and a clean virtual environment successfully imported the built wheel and raised `TemporalPlaneBinaryNotFoundError` for a missing CLI path.
+The live publish path is already implemented in [.github/workflows/publish-python.yml](../.github/workflows/publish-python.yml). The release trigger is a published GitHub Release, not a plain tag push. Local release preflight is standardized in [scripts/check-python-package.sh](../scripts/check-python-package.sh). Version metadata is now single-sourced from `python/mnemix/_version.py` so the package metadata and runtime version stay aligned. Local verification completed on 2026-03-09: 56 Python tests passed, sdist and wheel builds succeeded, `twine check` passed, and a clean virtual environment successfully imported the built wheel and raised `MnemixBinaryNotFoundError` for a missing CLI path.

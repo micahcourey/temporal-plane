@@ -1,6 +1,6 @@
 ---
 name: prompt-generator
-description: Generate new reusable prompts tailored for temporal-plane workspace following proven patterns
+description: Generate new reusable prompts tailored for mnemix workspace following proven patterns
 agent: agent
 tools:
   - semantic_search
@@ -10,7 +10,7 @@ tools:
 
 # Workspace Prompt Generator
 
-Generate a new reusable prompt file (.prompt.md) for the temporal-plane workspace that follows proven effective prompt patterns and project conventions.
+Generate a new reusable prompt file (.prompt.md) for the mnemix workspace that follows proven effective prompt patterns and project conventions.
 
 ## Input Requirements
 

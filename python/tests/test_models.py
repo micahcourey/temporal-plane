@@ -1,10 +1,10 @@
-"""Tests for temporal_plane.models — serialization and model construction."""
+"""Tests for mnemix.models — serialization and model construction."""
 
 from __future__ import annotations
 
 import pytest
 
-from temporal_plane.models import (
+from mnemix.models import (
     CheckpointRequest,
     CheckpointResult,
     MemoryDetail,

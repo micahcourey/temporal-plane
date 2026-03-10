@@ -1,4 +1,4 @@
-# Temporal Plane Versioning and Restore
+# Mnemix Versioning and Restore
 
 **Status:** draft implementation guidance
 
@@ -9,12 +9,12 @@
 - `checkout` is an internal storage operation for viewing historical state.
 - `restore` creates a new current head version from a historical version or checkpoint.
 
-Temporal Plane treats that final distinction as product-critical:
+Mnemix treats that final distinction as product-critical:
 
 - `checkout` does not redefine current history semantics.
 - `restore` does create a new current state and leaves prior versions inspectable.
 
-Restore is not a single atomic storage transaction. Temporal Plane resolves the target, performs the restore, and then refreshes the latest table handle so normal reads continue against the new head.
+Restore is not a single atomic storage transaction. Mnemix resolves the target, performs the restore, and then refreshes the latest table handle so normal reads continue against the new head.
 
 ## User-facing restore contract
 
@@ -34,7 +34,7 @@ Restore results report:
 
 ## Checkpoints and tags
 
-Temporal Plane implements checkpoints on top of Lance tags for the memories table.
+Mnemix implements checkpoints on top of Lance tags for the memories table.
 
 That means checkpoints are:
 

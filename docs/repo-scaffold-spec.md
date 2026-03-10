@@ -1,23 +1,23 @@
-# Temporal Plane Repository Scaffold Specification
+# Mnemix Repository Scaffold Specification
 
 **Status:** milestone 0 baseline
 **Date:** March 8, 2026
 
 This document freezes the initial repository scaffold for the first implementation phase.
 
-The active agent coding guidance for this repo lives in [temporal-plane-coding-guidelines.md](temporal-plane-coding-guidelines.md).
+The active agent coding guidance for this repo lives in [mnemix-coding-guidelines.md](mnemix-coding-guidelines.md).
 
 ## Goals
 
 - establish a Rust-workspace-first repository shape
 - keep the core product model separate from storage and CLI concerns
 - leave room for Python bindings and adapters without making them first-class implementation owners
-- keep the project aligned with [temporal-plane-roadmap.md](temporal-plane-roadmap.md), [temporal-plane-plan-v3.md](temporal-plane-plan-v3.md), and [lancedb-rust-sdk-agent-guide.md](lancedb-rust-sdk-agent-guide.md)
+- keep the project aligned with [mnemix-roadmap.md](mnemix-roadmap.md), [mnemix-plan-v3.md](mnemix-plan-v3.md), and [lancedb-rust-sdk-agent-guide.md](lancedb-rust-sdk-agent-guide.md)
 
 ## Top-level layout
 
 ```text
-temporal-plane/
+mnemix/
 ├── Cargo.toml
 ├── Cargo.lock
 ├── rust-toolchain.toml
@@ -32,15 +32,15 @@ temporal-plane/
 ├── AGENTS.md
 ├── .github/workflows/
 ├── crates/
-│   ├── temporal-plane-core/
-│   ├── temporal-plane-lancedb/
-│   ├── temporal-plane-cli/
-│   ├── temporal-plane-types/
-│   └── temporal-plane-test-support/
+│   ├── mnemix-core/
+│   ├── mnemix-lancedb/
+│   ├── mnemix-cli/
+│   ├── mnemix-types/
+│   └── mnemix-test-support/
 ├── python/
 │   ├── pyproject.toml
 │   ├── README.md
-│   └── temporal_plane/
+│   └── mnemix/
 ├── adapters/
 │   └── ai-dx-toolkit/
 ├── examples/
@@ -57,7 +57,7 @@ temporal-plane/
 
 ## Crate boundaries
 
-### `temporal-plane-core`
+### `mnemix-core`
 
 Owns product semantics only:
 
@@ -69,7 +69,7 @@ Owns product semantics only:
 
 Must not depend on `lancedb` or CLI formatting concerns.
 
-### `temporal-plane-lancedb`
+### `mnemix-lancedb`
 
 Owns concrete storage integration:
 
@@ -79,7 +79,7 @@ Owns concrete storage integration:
 - version/tag plumbing
 - future lower-level `lance` integration points
 
-### `temporal-plane-cli`
+### `mnemix-cli`
 
 Owns:
 
@@ -88,11 +88,11 @@ Owns:
 - machine-readable JSON output
 - terminal UX concerns
 
-### `temporal-plane-types`
+### `mnemix-types`
 
 Small shared types crate for value objects and serialization-safe request/response contracts that may later be shared across bindings and adapters.
 
-### `temporal-plane-test-support`
+### `mnemix-test-support`
 
 Non-production helpers for:
 

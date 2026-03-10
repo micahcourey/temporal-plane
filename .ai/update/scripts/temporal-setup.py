@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bootstrap the Temporal Plane: create venv, install lance-context, init store."""
+"""Bootstrap the Mnemix: create venv, install lance-context, init store."""
 
 import argparse
 import subprocess
@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Bootstrap the Temporal Plane")
+    parser = argparse.ArgumentParser(description="Bootstrap the Mnemix")
     parser.add_argument(
         "--store-path",
         default=".ai/temporal",
@@ -35,7 +35,7 @@ def main():
     )
 
     print()
-    print("Temporal Plane ready.")
+    print("Mnemix ready.")
     print(f"  Store:  {ai_dir / 'store.lance'}")
     print(f"  Python: {python}")
     print()

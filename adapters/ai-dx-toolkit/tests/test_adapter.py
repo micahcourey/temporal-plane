@@ -1,6 +1,6 @@
-"""Smoke tests for the AI DX Toolkit — Temporal Plane adapter.
+"""Smoke tests for the AI DX Toolkit — Mnemix adapter.
 
-These tests mock the ``temporal_plane.TemporalPlane`` client so the adapter
+These tests mock the ``mnemix.Mnemix`` client so the adapter
 behavior can be verified without a running store or binary.
 """
 
@@ -16,8 +16,8 @@ import pytest
 # when running tests from outside the package.
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from temporal_plane_adapter import TemporalPlaneAdapter
-from temporal_plane.models import (
+from mnemix_adapter import MnemixAdapter
+from mnemix.models import (
     CheckpointResult,
     MemoryDetail,
     RecallEntry,
@@ -90,9 +90,9 @@ def mock_client() -> MagicMock:
 
 
 @pytest.fixture()
-def adapter(mock_client: MagicMock) -> TemporalPlaneAdapter:
-    with patch("temporal_plane_adapter.TemporalPlane", return_value=mock_client):
-        a = TemporalPlaneAdapter(store=Path("/tmp/test-store"))
+def adapter(mock_client: MagicMock) -> MnemixAdapter:
+    with patch("mnemix_adapter.Mnemix", return_value=mock_client):
+        a = MnemixAdapter(store=Path("/tmp/test-store"))
     a._client = mock_client
     return a
 
@@ -103,7 +103,7 @@ def adapter(mock_client: MagicMock) -> TemporalPlaneAdapter:
 
 
 class TestEnsureStore:
-    def test_calls_init(self, adapter: TemporalPlaneAdapter, mock_client: MagicMock) -> None:
+    def test_calls_init(self, adapter: MnemixAdapter, mock_client: MagicMock) -> None:
         adapter.ensure_store()
         mock_client.init.assert_called_once()
 
@@ -115,7 +115,7 @@ class TestEnsureStore:
 
 class TestRecordObservation:
     def test_delegates_to_remember(
-        self, adapter: TemporalPlaneAdapter, mock_client: MagicMock
+        self, adapter: MnemixAdapter, mock_client: MagicMock
     ) -> None:
         mock_client.remember.return_value = _MEMORY_DETAIL
         result = adapter.record_observation(
@@ -133,7 +133,7 @@ class TestRecordObservation:
         assert req.scope == "agent-x"
 
     def test_passes_tags_and_source_tool(
-        self, adapter: TemporalPlaneAdapter, mock_client: MagicMock
+        self, adapter: MnemixAdapter, mock_client: MagicMock
     ) -> None:
         mock_client.remember.return_value = _MEMORY_DETAIL
         adapter.record_observation(
@@ -157,7 +157,7 @@ class TestRecordObservation:
 
 class TestRecordDecision:
     def test_uses_decision_kind(
-        self, adapter: TemporalPlaneAdapter, mock_client: MagicMock
+        self, adapter: MnemixAdapter, mock_client: MagicMock
     ) -> None:
         mock_client.remember.return_value = _MEMORY_DETAIL
         adapter.record_decision(
@@ -171,7 +171,7 @@ class TestRecordDecision:
         assert req.kind == "decision"
 
     def test_pin_reason_forwarded(
-        self, adapter: TemporalPlaneAdapter, mock_client: MagicMock
+        self, adapter: MnemixAdapter, mock_client: MagicMock
     ) -> None:
         mock_client.remember.return_value = _MEMORY_DETAIL
         adapter.record_decision(
@@ -193,7 +193,7 @@ class TestRecordDecision:
 
 class TestFetchContext:
     def test_returns_flat_list(
-        self, adapter: TemporalPlaneAdapter, mock_client: MagicMock
+        self, adapter: MnemixAdapter, mock_client: MagicMock
     ) -> None:
         entry = RecallEntry(layer="pinned_context", reasons=["pinned"], memory=_SUMMARY)
         mock_client.recall.return_value = RecallResult(
@@ -210,7 +210,7 @@ class TestFetchContext:
         assert result[0].layer == "pinned_context"
 
     def test_uses_summary_then_pinned_depth(
-        self, adapter: TemporalPlaneAdapter, mock_client: MagicMock
+        self, adapter: MnemixAdapter, mock_client: MagicMock
     ) -> None:
         mock_client.recall.return_value = RecallResult(
             scope="agent-x",
@@ -227,7 +227,7 @@ class TestFetchContext:
         assert req.text == "test"
 
     def test_all_layers_combined(
-        self, adapter: TemporalPlaneAdapter, mock_client: MagicMock
+        self, adapter: MnemixAdapter, mock_client: MagicMock
     ) -> None:
         pinned = RecallEntry(layer="pinned_context", reasons=["pinned"], memory=_SUMMARY)
         summary_entry = RecallEntry(layer="summary", reasons=["summary_kind"], memory=_SUMMARY)
@@ -255,7 +255,7 @@ class TestFetchContext:
 
 class TestCreateSessionCheckpoint:
     def test_checkpoint_created(
-        self, adapter: TemporalPlaneAdapter, mock_client: MagicMock
+        self, adapter: MnemixAdapter, mock_client: MagicMock
     ) -> None:
         mock_client.checkpoint.return_value = _CHECKPOINT
         result = adapter.create_session_checkpoint("sess-001", description="session start")
@@ -272,14 +272,14 @@ class TestCreateSessionCheckpoint:
 
 class TestGetStats:
     def test_returns_stats(
-        self, adapter: TemporalPlaneAdapter, mock_client: MagicMock
+        self, adapter: MnemixAdapter, mock_client: MagicMock
     ) -> None:
         mock_client.stats.return_value = _STATS
         result = adapter.get_stats()
         assert result.total_memories == 5
 
     def test_passes_scope(
-        self, adapter: TemporalPlaneAdapter, mock_client: MagicMock
+        self, adapter: MnemixAdapter, mock_client: MagicMock
     ) -> None:
         mock_client.stats.return_value = _STATS
         adapter.get_stats(scope="my-agent")

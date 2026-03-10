@@ -2,8 +2,8 @@
 
 ## Repository and Crate Names
 
-- repository root: `temporal-plane`
-- workspace crates: `temporal-plane-*`
+- repository root: `mnemix`
+- workspace crates: `mnemix-*`
 - adapter directories should use the host name, for example `adapters/ai-dx-toolkit`
 
 ## Rust Code
@@ -20,5 +20,5 @@ Prefer explicit names that encode product meaning, for example `MemoryId`, `Scop
 
 ## Sources
 
-- `docs/temporal-plane-coding-guidelines.md`
-- `docs/temporal-plane-roadmap.md`
+- `docs/mnemix-coding-guidelines.md`
+- `docs/mnemix-roadmap.md`

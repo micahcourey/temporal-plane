@@ -27,6 +27,6 @@
 
 ## Sources
 
-- `docs/temporal-plane-plan-v3.md`
+- `docs/mnemix-plan-v3.md`
 - `README.md`
 - `.github/workflows/ci.yml`

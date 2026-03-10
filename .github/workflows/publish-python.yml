@@ -65,13 +65,13 @@ jobs:
         include:
           - os: ubuntu-latest
             label: linux-x86_64
-            cli_binary: target/release/temporal-plane
+            cli_binary: target/release/mnemix
           - os: macos-latest
             label: macos-arm64
-            cli_binary: target/release/temporal-plane
+            cli_binary: target/release/mnemix
           - os: windows-latest
             label: windows-x86_64
-            cli_binary: target/release/temporal-plane.exe
+            cli_binary: target/release/mnemix.exe
 
     steps:
       - uses: actions/checkout@v4
@@ -94,7 +94,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Build CLI release binary
-        run: cargo build --release -p temporal-plane-cli
+        run: cargo build --release -p mnemix-cli
 
       - name: Build and verify bundled wheel
         shell: bash

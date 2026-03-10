@@ -24,7 +24,7 @@ jobs:
 
       - name: Ensure key planning docs exist
         run: |
-          test -f docs/temporal-plane-plan-v3.md
-          test -f docs/temporal-plane-roadmap.md
+          test -f docs/mnemix-plan-v3.md
+          test -f docs/mnemix-roadmap.md
           test -f docs/lancedb-rust-sdk-agent-guide.md
           test -f docs/repo-scaffold-spec.md

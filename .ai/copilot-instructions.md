@@ -1,4 +1,4 @@
-# temporal-plane — GitHub Copilot Instructions
+# mnemix — GitHub Copilot Instructions
 
 > Canonical routing is in [AGENTS.md](../AGENTS.md).
 

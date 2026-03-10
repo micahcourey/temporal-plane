@@ -1,11 +1,11 @@
 ---
 name: git-workflow
-description: Git and GitHub workflow automation for temporal-plane repositories. Use when working with branches, PRs, commits, or repository management.
+description: Git and GitHub workflow automation for mnemix repositories. Use when working with branches, PRs, commits, or repository management.
 ---
 
 # Git Workflow Skill
 
-Automate common Git and GitHub workflows following temporal-plane conventions.
+Automate common Git and GitHub workflows following mnemix conventions.
 
 ## Context Files
 

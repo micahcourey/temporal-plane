@@ -1,13 +1,13 @@
-# Structured schema inventory for Temporal Plane.
+# Structured schema inventory for Mnemix.
 # Status values distinguish implemented structure from planned architecture.
 
 databases:
-  - name: temporal_plane_local
+  - name: mnemix_local
     engine: LanceDB
     status: planned
     notes: "Planned local-first memory store from project docs; no implemented tables detected yet."
     tables: []
-  - name: temporal_plane_dataset
+  - name: mnemix_dataset
     engine: Lance
     status: planned
     notes: "Planned lower-level dataset/version layer for tags, restore, and advanced workflows."

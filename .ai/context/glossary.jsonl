@@ -1,12 +1,12 @@
-{"term":"Temporal Plane","type":"product","definition":"A standalone, local-first memory layer for AI coding agents and related tooling.","context":"product identity","needs_review":false}
-{"term":"memory record","type":"entity","definition":"A durable stored memory unit managed by Temporal Plane.","context":"core model","needs_review":true}
+{"term":"Mnemix","type":"product","definition":"A standalone, local-first memory layer for AI coding agents and related tooling.","context":"product identity","needs_review":false}
+{"term":"memory record","type":"entity","definition":"A durable stored memory unit managed by Mnemix.","context":"core model","needs_review":true}
 {"term":"pin","type":"concept","definition":"A high-priority memory item that should be favored during retrieval.","context":"retrieval and disclosure","needs_review":true}
 {"term":"archival memory","type":"concept","definition":"Deeper memory that is not loaded by default and is expanded on demand.","context":"progressive disclosure","needs_review":true}
 {"term":"progressive disclosure","type":"concept","definition":"A retrieval strategy that loads the most relevant compact context first and expands only when needed.","context":"retrieval behavior","needs_review":false}
 {"term":"checkpoint","type":"entity","definition":"A human-readable named reference to a stable storage version.","context":"versioning","needs_review":false}
 {"term":"checkout","type":"operation","definition":"Read or inspect a prior state without making it the current head.","context":"versioning","needs_review":false}
 {"term":"restore","type":"operation","definition":"Create a new current state from a selected historical state.","context":"versioning","needs_review":false}
-{"term":"LanceDB","type":"technology","definition":"The planned application-facing local storage layer for Temporal Plane.","context":"storage","needs_review":false}
+{"term":"LanceDB","type":"technology","definition":"The planned application-facing local storage layer for Mnemix.","context":"storage","needs_review":false}
 {"term":"Lance","type":"technology","definition":"The planned lower-level dataset layer used for advanced version-control-style workflows.","context":"storage","needs_review":false}
 {"term":"scope","type":"entity","definition":"A boundary used to organize and retrieve memory in context-aware ways.","context":"core model","needs_review":true}
 {"term":"recall","type":"operation","definition":"The retrieval flow that returns ranked memory relevant to a query or scope.","context":"core model","needs_review":true}

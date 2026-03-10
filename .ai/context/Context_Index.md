@@ -21,4 +21,4 @@
 3. Treat missing files as intentional simplification for the current repo scope.
 
 **Last Updated**: 2026-03-08
-**Project**: temporal-plane
+**Project**: mnemix

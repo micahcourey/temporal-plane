@@ -9,7 +9,7 @@ ignore = [
   # There is no safe upgrade available yet, so we track it until upstream moves.
   "RUSTSEC-2024-0436",
   # `rsa` is pulled transitively via `reqsign` -> `opendal` in the current
-  # `lancedb` / `lance` stack. Temporal Plane uses this dependency chain only in
+  # `lancedb` / `lance` stack. Mnemix uses this dependency chain only in
   # local filesystem contexts and no safe upgrade is available yet.
   "RUSTSEC-2023-0071",
   # `rustls-pemfile` is pulled transitively by the current `lancedb` / `lance`

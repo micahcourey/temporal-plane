@@ -1,33 +1,33 @@
-# Temporal Plane Python Binding
+# Mnemix Python Binding
 
-A thin, typed Python client for [Temporal Plane](../README.md) — a local-first
+A thin, typed Python client for [Mnemix](../README.md) — a local-first
 memory layer for AI coding agents.
 
-All product logic lives in the Rust `temporal-plane` CLI binary.  This package
+All product logic lives in the Rust `mnemix` CLI binary.  This package
 wraps its `--json` output surface; no core behavior is duplicated here.
 
 ## Requirements
 
 - Python 3.11 or later
-- On supported platforms, the published wheel bundles the `temporal-plane`
+- On supported platforms, the published wheel bundles the `mnemix`
     binary automatically
 - On unsupported platforms or source installs, install the CLI separately via
-    `cargo install --path crates/temporal-plane-cli` or set
-    `TP_BINARY=/path/to/temporal-plane`
+    `cargo install --path crates/mnemix-cli` or set
+    `MNEMIX_BINARY=/path/to/mnemix`
 
 ## Installation
 
 Install the Python wrapper from PyPI:
 
 ```bash
-pip install temporal-plane
+pip install mnemix
 ```
 
-On supported platforms, this wheel includes the Rust `temporal-plane` CLI
+On supported platforms, this wheel includes the Rust `mnemix` CLI
 binary and should work without any additional setup.
 
 If no bundled wheel is available for your platform, install the CLI separately
-and ensure `temporal-plane` is on `PATH`, or set `TP_BINARY` to an explicit
+and ensure `mnemix` is on `PATH`, or set `MNEMIX_BINARY` to an explicit
 binary path.
 
 ## Installation (development)
@@ -41,9 +41,9 @@ pip install -e ".[dev]"
 
 ```python
 from pathlib import Path
-from temporal_plane import TemporalPlane, RememberRequest
+from mnemix import Mnemix, RememberRequest
 
-tp = TemporalPlane(store=Path(".temporal-plane"))
+tp = Mnemix(store=Path(".mnemix"))
 tp.init()
 
 tp.remember(RememberRequest(
@@ -91,10 +91,10 @@ print(f"Total memories: {stats.total_memories}")
 
 | Exception | When raised |
 |-----------|-------------|
-| `TemporalPlaneError` | Base class for all errors |
-| `TemporalPlaneCommandError` | CLI returned a non-zero exit or error JSON |
-| `TemporalPlaneBinaryNotFoundError` | `temporal-plane` binary not found on PATH |
-| `TemporalPlaneDecodeError` | CLI output could not be decoded |
+| `MnemixError` | Base class for all errors |
+| `MnemixCommandError` | CLI returned a non-zero exit or error JSON |
+| `MnemixBinaryNotFoundError` | `mnemix` binary not found on PATH |
+| `MnemixDecodeError` | CLI output could not be decoded |
 
 ## Running Tests
 
@@ -116,7 +116,7 @@ release checks from the repository root:
 
 This runs Python tests, builds the wheel and sdist, and validates package
 metadata rendering with `twine check`. It also installs the freshly built wheel
-into a clean virtual environment and verifies that `temporal_plane` imports and
+into a clean virtual environment and verifies that `mnemix` imports and
 exposes `__version__` correctly.
 
 ## Binding Strategy

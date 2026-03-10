@@ -167,7 +167,7 @@ Show the specific records being added, removed, or modified:
 repositories.jsonl changes:
 
   ADD:
-    {"name": "temporal-plane", "type": "library", "tech_stack": ["Rust", "Cargo"], ...}
+    {"name": "mnemix", "type": "library", "tech_stack": ["Rust", "Cargo"], ...}
 
   REMOVE:
     {"name": "old-generated-example", ...}

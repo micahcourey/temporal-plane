@@ -1,6 +1,6 @@
-"""Tests for temporal_plane.client — subprocess boundary and client methods.
+"""Tests for mnemix.client — subprocess boundary and client methods.
 
-These tests use ``pytest-mock`` to patch ``temporal_plane._runner.run``
+These tests use ``pytest-mock`` to patch ``mnemix._runner.run``
 so no binary is required at test time.
 """
 
@@ -12,9 +12,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from temporal_plane import TemporalPlane
-from temporal_plane.errors import TemporalPlaneCommandError
-from temporal_plane.models import (
+from mnemix import Mnemix
+from mnemix.errors import MnemixCommandError
+from mnemix.models import (
     CheckpointRequest,
     OptimizeRequest,
     RecallRequest,
@@ -60,8 +60,8 @@ _CHECKPOINT = {
 
 
 @pytest.fixture()
-def tp() -> TemporalPlane:
-    return TemporalPlane(store=Path("/tmp/test-store"))
+def tp() -> Mnemix:
+    return Mnemix(store=Path("/tmp/test-store"))
 
 
 # ---------------------------------------------------------------------------
@@ -70,8 +70,8 @@ def tp() -> TemporalPlane:
 
 
 class TestInit:
-    def test_calls_init_subcommand(self, tp: TemporalPlane) -> None:
-        with patch("temporal_plane._runner.run") as mock_run:
+    def test_calls_init_subcommand(self, tp: Mnemix) -> None:
+        with patch("mnemix._runner.run") as mock_run:
             mock_run.return_value = {"command": "init", "status": "ok", "message": "ready"}
             tp.init()
         mock_run.assert_called_once_with(Path("/tmp/test-store"), "init", [])
@@ -94,16 +94,16 @@ class TestRemember:
             **kwargs,
         )
 
-    def test_returns_memory_detail(self, tp: TemporalPlane) -> None:
-        with patch("temporal_plane._runner.run") as mock_run:
+    def test_returns_memory_detail(self, tp: Mnemix) -> None:
+        with patch("mnemix._runner.run") as mock_run:
             mock_run.return_value = {"command": "remember", "action": "upsert", "memory": _MEMORY_DETAIL}
             result = tp.remember(self._request())
         assert result.id == "mem-001"
         assert result.detail == "Full detail"
 
-    def test_includes_tags_and_entities(self, tp: TemporalPlane) -> None:
+    def test_includes_tags_and_entities(self, tp: Mnemix) -> None:
         req = self._request(tags=["alpha", "beta"], entities=["project-x"])
-        with patch("temporal_plane._runner.run") as mock_run:
+        with patch("mnemix._runner.run") as mock_run:
             mock_run.return_value = {"command": "remember", "action": "upsert", "memory": _MEMORY_DETAIL}
             tp.remember(req)
         args = mock_run.call_args[0][2]
@@ -112,18 +112,18 @@ class TestRemember:
         assert "--entity" in args
         assert "project-x" in args
 
-    def test_includes_pin_reason(self, tp: TemporalPlane) -> None:
+    def test_includes_pin_reason(self, tp: Mnemix) -> None:
         req = self._request(pin_reason="Important decision")
-        with patch("temporal_plane._runner.run") as mock_run:
+        with patch("mnemix._runner.run") as mock_run:
             mock_run.return_value = {"command": "remember", "action": "upsert", "memory": _MEMORY_DETAIL}
             tp.remember(req)
         args = mock_run.call_args[0][2]
         assert "--pin-reason" in args
         assert "Important decision" in args
 
-    def test_includes_metadata(self, tp: TemporalPlane) -> None:
+    def test_includes_metadata(self, tp: Mnemix) -> None:
         req = self._request(metadata={"key": "val"})
-        with patch("temporal_plane._runner.run") as mock_run:
+        with patch("mnemix._runner.run") as mock_run:
             mock_run.return_value = {"command": "remember", "action": "upsert", "memory": _MEMORY_DETAIL}
             tp.remember(req)
         args = mock_run.call_args[0][2]
@@ -137,8 +137,8 @@ class TestRemember:
 
 
 class TestShow:
-    def test_returns_memory_detail(self, tp: TemporalPlane) -> None:
-        with patch("temporal_plane._runner.run") as mock_run:
+    def test_returns_memory_detail(self, tp: Mnemix) -> None:
+        with patch("mnemix._runner.run") as mock_run:
             mock_run.return_value = {"command": "show", "memory": _MEMORY_DETAIL}
             result = tp.show("mem-001")
         assert result.id == "mem-001"
@@ -151,8 +151,8 @@ class TestShow:
 
 
 class TestSearch:
-    def test_returns_list(self, tp: TemporalPlane) -> None:
-        with patch("temporal_plane._runner.run") as mock_run:
+    def test_returns_list(self, tp: Mnemix) -> None:
+        with patch("mnemix._runner.run") as mock_run:
             mock_run.return_value = {
                 "command": "search",
                 "count": 1,
@@ -164,8 +164,8 @@ class TestSearch:
         assert len(results) == 1
         assert results[0].id == "mem-001"
 
-    def test_passes_scope_and_limit(self, tp: TemporalPlane) -> None:
-        with patch("temporal_plane._runner.run") as mock_run:
+    def test_passes_scope_and_limit(self, tp: Mnemix) -> None:
+        with patch("mnemix._runner.run") as mock_run:
             mock_run.return_value = {"memories": []}
             tp.search("q", scope="my-scope", limit=5)
         args = mock_run.call_args[0][2]
@@ -174,8 +174,8 @@ class TestSearch:
         assert "--limit" in args
         assert "5" in args
 
-    def test_empty_results(self, tp: TemporalPlane) -> None:
-        with patch("temporal_plane._runner.run") as mock_run:
+    def test_empty_results(self, tp: Mnemix) -> None:
+        with patch("mnemix._runner.run") as mock_run:
             mock_run.return_value = {"memories": []}
             results = tp.search("nothing")
         assert results == []
@@ -187,8 +187,8 @@ class TestSearch:
 
 
 class TestRecall:
-    def test_default_request(self, tp: TemporalPlane) -> None:
-        with patch("temporal_plane._runner.run") as mock_run:
+    def test_default_request(self, tp: Mnemix) -> None:
+        with patch("mnemix._runner.run") as mock_run:
             mock_run.return_value = {
                 "scope": None,
                 "query_text": None,
@@ -204,9 +204,9 @@ class TestRecall:
         assert "--disclosure-depth" in args
         assert "summary_then_pinned" in args
 
-    def test_custom_request(self, tp: TemporalPlane) -> None:
+    def test_custom_request(self, tp: Mnemix) -> None:
         req = RecallRequest(text="search text", scope="s", disclosure_depth="full", limit=5)
-        with patch("temporal_plane._runner.run") as mock_run:
+        with patch("mnemix._runner.run") as mock_run:
             mock_run.return_value = {
                 "scope": "s",
                 "query_text": "search text",
@@ -231,14 +231,14 @@ class TestRecall:
 
 
 class TestPins:
-    def test_returns_list(self, tp: TemporalPlane) -> None:
-        with patch("temporal_plane._runner.run") as mock_run:
+    def test_returns_list(self, tp: Mnemix) -> None:
+        with patch("mnemix._runner.run") as mock_run:
             mock_run.return_value = {"command": "pins", "count": 1, "memories": [_MEMORY_SUMMARY]}
             result = tp.pins()
         assert len(result) == 1
 
-    def test_passes_scope(self, tp: TemporalPlane) -> None:
-        with patch("temporal_plane._runner.run") as mock_run:
+    def test_passes_scope(self, tp: Mnemix) -> None:
+        with patch("mnemix._runner.run") as mock_run:
             mock_run.return_value = {"memories": []}
             tp.pins(scope="my-scope")
         args = mock_run.call_args[0][2]
@@ -246,8 +246,8 @@ class TestPins:
 
 
 class TestHistory:
-    def test_returns_list(self, tp: TemporalPlane) -> None:
-        with patch("temporal_plane._runner.run") as mock_run:
+    def test_returns_list(self, tp: Mnemix) -> None:
+        with patch("mnemix._runner.run") as mock_run:
             mock_run.return_value = {"memories": [_MEMORY_SUMMARY]}
             result = tp.history()
         assert len(result) == 1
@@ -259,8 +259,8 @@ class TestHistory:
 
 
 class TestCheckpoint:
-    def test_creates_checkpoint(self, tp: TemporalPlane) -> None:
-        with patch("temporal_plane._runner.run") as mock_run:
+    def test_creates_checkpoint(self, tp: Mnemix) -> None:
+        with patch("mnemix._runner.run") as mock_run:
             mock_run.return_value = {"command": "checkpoint", "action": "create", "checkpoint": _CHECKPOINT}
             result = tp.checkpoint(CheckpointRequest(name="cp-1", description="desc"))
         assert result.name == "cp-1"
@@ -275,7 +275,7 @@ class TestCheckpoint:
 
 
 class TestVersions:
-    def test_returns_list(self, tp: TemporalPlane) -> None:
+    def test_returns_list(self, tp: Mnemix) -> None:
         version_data = {
             "version": 1,
             "recorded_at": "2026-01-01T00:00:00Z",
@@ -283,7 +283,7 @@ class TestVersions:
             "checkpoint_version": None,
             "summary": None,
         }
-        with patch("temporal_plane._runner.run") as mock_run:
+        with patch("mnemix._runner.run") as mock_run:
             mock_run.return_value = {"command": "versions", "count": 1, "scope": None, "versions": [version_data]}
             result = tp.versions()
         assert len(result) == 1
@@ -296,7 +296,7 @@ class TestVersions:
 
 
 class TestRestore:
-    def test_restore_by_checkpoint(self, tp: TemporalPlane) -> None:
+    def test_restore_by_checkpoint(self, tp: Mnemix) -> None:
         data = {
             "command": "restore",
             "target": {"kind": "checkpoint", "name": "cp-1", "version": 2},
@@ -305,21 +305,21 @@ class TestRestore:
             "current_version": 4,
             "pre_restore_checkpoint": _CHECKPOINT,
         }
-        with patch("temporal_plane._runner.run") as mock_run:
+        with patch("mnemix._runner.run") as mock_run:
             mock_run.return_value = data
             result = tp.restore(RestoreRequest(checkpoint="cp-1"))
         assert result.restored_version == 2
         args = mock_run.call_args[0][2]
         assert "--checkpoint" in args
 
-    def test_restore_by_version(self, tp: TemporalPlane) -> None:
+    def test_restore_by_version(self, tp: Mnemix) -> None:
         data = {
             "previous_version": 3,
             "restored_version": 1,
             "current_version": 4,
             "pre_restore_checkpoint": None,
         }
-        with patch("temporal_plane._runner.run") as mock_run:
+        with patch("mnemix._runner.run") as mock_run:
             mock_run.return_value = data
             result = tp.restore(RestoreRequest(version=1))
         args = mock_run.call_args[0][2]
@@ -333,7 +333,7 @@ class TestRestore:
 
 
 class TestOptimize:
-    def test_default_no_prune(self, tp: TemporalPlane) -> None:
+    def test_default_no_prune(self, tp: Mnemix) -> None:
         data = {
             "command": "optimize",
             "previous_version": 2,
@@ -345,14 +345,14 @@ class TestOptimize:
             "retention": {"minimum_age_days": 30, "delete_unverified": False, "error_if_tagged_old_versions": True},
             "pre_optimize_checkpoint": None,
         }
-        with patch("temporal_plane._runner.run") as mock_run:
+        with patch("mnemix._runner.run") as mock_run:
             mock_run.return_value = data
             result = tp.optimize()
         args = mock_run.call_args[0][2]
         assert "--prune" not in args
         assert result.compacted is True
 
-    def test_prune_flag_included(self, tp: TemporalPlane) -> None:
+    def test_prune_flag_included(self, tp: Mnemix) -> None:
         data = {
             "previous_version": 2,
             "current_version": 3,
@@ -363,7 +363,7 @@ class TestOptimize:
             "retention": {"minimum_age_days": 10, "delete_unverified": False, "error_if_tagged_old_versions": True},
             "pre_optimize_checkpoint": None,
         }
-        with patch("temporal_plane._runner.run") as mock_run:
+        with patch("mnemix._runner.run") as mock_run:
             mock_run.return_value = data
             tp.optimize(OptimizeRequest(prune=True, older_than_days=10))
         args = mock_run.call_args[0][2]
@@ -378,8 +378,8 @@ class TestOptimize:
 
 
 class TestStats:
-    def test_returns_stats(self, tp: TemporalPlane) -> None:
-        with patch("temporal_plane._runner.run") as mock_run:
+    def test_returns_stats(self, tp: Mnemix) -> None:
+        with patch("mnemix._runner.run") as mock_run:
             mock_run.return_value = {
                 "command": "stats",
                 "stats": {
@@ -401,8 +401,8 @@ class TestStats:
 
 
 class TestErrorPropagation:
-    def test_command_error_propagated(self, tp: TemporalPlane) -> None:
-        with patch("temporal_plane._runner.run") as mock_run:
-            mock_run.side_effect = TemporalPlaneCommandError("store not found", "store_not_found")
-            with pytest.raises(TemporalPlaneCommandError, match="store not found"):
+    def test_command_error_propagated(self, tp: Mnemix) -> None:
+        with patch("mnemix._runner.run") as mock_run:
+            mock_run.side_effect = MnemixCommandError("store not found", "store_not_found")
+            with pytest.raises(MnemixCommandError, match="store not found"):
                 tp.stats()

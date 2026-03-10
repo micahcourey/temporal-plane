@@ -53,19 +53,20 @@ import os
 import tempfile
 from pathlib import Path
 
-from temporal_plane import TemporalPlane
-from temporal_plane._runner import _find_binary
+from mnemix import Mnemix
+from mnemix._runner import _find_binary
 
-os.environ.pop("TP_BINARY", None)
+os.environ.pop("MNEMIX_BINARY", None)
+os.environ.pop("MNEMIX_BINARY", None)
 
 binary = _find_binary()
 print(binary)
-assert "temporal_plane" in binary
+assert "mnemix" in binary
 assert Path(binary).exists()
 
 with tempfile.TemporaryDirectory() as tmpdir:
-    store = Path(tmpdir) / ".temporal-plane"
-    client = TemporalPlane(store=store)
+    store = Path(tmpdir) / ".mnemix"
+    client = Mnemix(store=store)
     client.init()
     assert store.exists()
 PY

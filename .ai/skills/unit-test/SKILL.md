@@ -1,6 +1,6 @@
 ---
 name: unit-test
-description: Generate and improve Rust 2024 crate tests and Python binding tests for Temporal Plane with deterministic fixtures, typed API coverage, and 80%+ coverage goals.
+description: Generate and improve Rust 2024 crate tests and Python binding tests for Mnemix with deterministic fixtures, typed API coverage, and 80%+ coverage goals.
 ---
 
 # Unit Test Generator
@@ -20,7 +20,7 @@ This skill activates when:
 
 ## Project Testing Priorities
 
-Temporal Plane is **Rust-first**.
+Mnemix is **Rust-first**.
 
 - Rust tests validate product semantics and remain the source of truth.
 - Python tests validate wrapper behavior and parity with Rust-backed semantics.
@@ -50,7 +50,7 @@ Before generating tests:
 
 | Surface | Preferred Style | Notes |
 |--------|------------------|-------|
-| `temporal-plane-core` | focused unit tests close to domain types | test invariants, typed construction, error cases |
+| `mnemix-core` | focused unit tests close to domain types | test invariants, typed construction, error cases |
 | cross-crate workflows | `tests/` integration tests | verify public behavior only |
 | CLI output | snapshot-style tests | keep command execution separate from rendering |
 | Python bindings | `pytest` tests | verify wrapper semantics, not duplicated business logic |
@@ -93,11 +93,11 @@ mod tests {
 ```
 
 ```rust
-use temporal_plane_core::ScopeId;
+use mnemix_core::ScopeId;
 
 #[test]
 fn search_query_preserves_scope_filter() {
-  let scope = ScopeId::try_from("repo:temporal-plane").unwrap();
+  let scope = ScopeId::try_from("repo:mnemix").unwrap();
   let query = SearchQuery::builder()
     .scope(scope.clone())
     .text("checkpoint")
@@ -146,7 +146,7 @@ from pathlib import Path
 def test_open_store_uses_explicit_path(tmp_path: Path) -> None:
   store_path = tmp_path / "store"
 
-  client = TemporalPlane.open(store_path)
+  client = Mnemix.open(store_path)
 
   assert client.path == store_path
 ```
@@ -158,7 +158,7 @@ import pytest
 @pytest.mark.parametrize(
   ("value", "expected"),
   [
-    ("repo:temporal-plane", "repo:temporal-plane"),
+    ("repo:mnemix", "repo:mnemix"),
     ("branch:main", "branch:main"),
   ],
 )
@@ -202,7 +202,7 @@ Systematically cover these categories when relevant:
 - Prefer one primary behavior per test.
 - Prefer descriptive names over comments.
 - Use shared helpers only when they improve clarity.
-- Put reusable Rust helpers in `temporal-plane-test-support` when cross-crate reuse is justified.
+- Put reusable Rust helpers in `mnemix-test-support` when cross-crate reuse is justified.
 - Keep doc examples aligned with tested behavior when public API examples exist.
 - For CLI work, protect human-readable output with snapshots only after rendering is stable.
 

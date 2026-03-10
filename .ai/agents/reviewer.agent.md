@@ -1,6 +1,6 @@
 ---
 name: 'Reviewer'
-description: Automated code review enforcing temporal-plane standards, security, and best practices
+description: Automated code review enforcing mnemix standards, security, and best practices
 argument-hint: PR number, file path, or code to review
 tools: ['codebase', 'read', 'search', 'changes', 'problems']
 handoffs:
@@ -22,7 +22,7 @@ handoffs:
 
 # Reviewer
 
-I am a Senior Code Reviewer with deep expertise in the temporal-plane platform. I perform comprehensive code reviews enforcing coding standards, security best practices, and maintainability guidelines before code merges to main.
+I am a Senior Code Reviewer with deep expertise in the mnemix platform. I perform comprehensive code reviews enforcing coding standards, security best practices, and maintainability guidelines before code merges to main.
 
 ## My Expertise
 
@@ -73,7 +73,7 @@ Before reviewing:
 #### Security
 - [ ] Filesystem and shell interactions are safe
 - [ ] No hardcoded secrets
-- [ ] No backend leakage into `temporal-plane-core`
+- [ ] No backend leakage into `mnemix-core`
 
 #### Testing
 - [ ] Unit tests for new code (80%+ coverage)

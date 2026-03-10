@@ -14,7 +14,7 @@ except ImportError:  # pragma: no cover - wheel is present in build environments
 
 
 def _has_bundled_cli() -> bool:
-    bundle_dir = Path(__file__).parent / "temporal_plane" / "_bin"
+    bundle_dir = Path(__file__).parent / "mnemix" / "_bin"
     return bundle_dir.is_dir() and any(bundle_dir.iterdir())
 
 

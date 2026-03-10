@@ -1,10 +1,10 @@
-# Temporal Plane Checkpoint and Retention Policy
+# Mnemix Checkpoint and Retention Policy
 
 **Status:** draft implementation guidance
 
 ## Purpose
 
-This document records the default naming and safety policy for checkpoints, restore, and optimize flows in Temporal Plane v1.
+This document records the default naming and safety policy for checkpoints, restore, and optimize flows in Mnemix v1.
 
 ## Checkpoint naming policy
 
@@ -26,7 +26,7 @@ Automatic safety checkpoints use operation-specific prefixes and the current ver
 - `pre-import-v<version>`
 - `pre-cleanup-v<version>`
 
-If the current version already has a checkpoint, Temporal Plane reuses the existing checkpoint instead of creating a duplicate version tag.
+If the current version already has a checkpoint, Mnemix reuses the existing checkpoint instead of creating a duplicate version tag.
 
 ## Conservative retention defaults
 

@@ -1,4 +1,4 @@
-"""AI DX Toolkit adapter example.
+"""AI DX Toolkit adapter example for Mnemix.
 
 Run with:
     tp binary on PATH (cargo build --release, then add target/release to PATH)
@@ -9,13 +9,13 @@ Run with:
 import sys
 from pathlib import Path
 
-# Add the adapter directory so temporal_plane_adapter is importable
+# Add the adapter directory so mnemix_adapter is importable
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "adapters" / "ai-dx-toolkit"))
 
-from temporal_plane_adapter import TemporalPlaneAdapter
+from mnemix_adapter import MnemixAdapter
 
-store = Path("/tmp/tp-adapter-example")
-adapter = TemporalPlaneAdapter(store=store)
+store = Path("/tmp/mnemix-adapter-example")
+adapter = MnemixAdapter(store=store)
 
 # Initialise
 adapter.ensure_store()

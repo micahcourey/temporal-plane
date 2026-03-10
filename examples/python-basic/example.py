@@ -1,4 +1,4 @@
-"""Basic Temporal Plane Python binding example.
+"""Basic Mnemix Python binding example.
 
 Run with:
     tp binary on PATH (cargo build --release, then add target/release to PATH)
@@ -8,11 +8,11 @@ Run with:
 
 from pathlib import Path
 
-from temporal_plane import TemporalPlane, RememberRequest
-from temporal_plane.models import CheckpointRequest
+from mnemix import Mnemix, RememberRequest
+from mnemix.models import CheckpointRequest
 
-store = Path("/tmp/tp-python-basic-example")
-tp = TemporalPlane(store=store)
+store = Path("/tmp/mnemix-python-basic-example")
+tp = Mnemix(store=store)
 
 # 1. Initialise the store
 tp.init()

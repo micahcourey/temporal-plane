@@ -1,4 +1,4 @@
-# temporal-plane — Repository Index
+# mnemix — Repository Index
 
 > This workspace is a single primary repository with a few notable embedded/reference directories.
 

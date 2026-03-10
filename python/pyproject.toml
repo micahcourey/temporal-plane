@@ -3,9 +3,9 @@ requires = ["setuptools>=69", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "temporal-plane"
+name = "mnemix"
 dynamic = ["version"]
-description = "Python binding for Temporal Plane — a local-first memory layer for AI coding agents"
+description = "Python binding for Mnemix — a local-first memory layer for AI coding agents"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
@@ -20,10 +20,10 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/micahcourey/temporal-plane"
-Repository = "https://github.com/micahcourey/temporal-plane"
-Issues = "https://github.com/micahcourey/temporal-plane/issues"
-Changelog = "https://github.com/micahcourey/temporal-plane/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/micahcourey/mnemix"
+Repository = "https://github.com/micahcourey/mnemix"
+Issues = "https://github.com/micahcourey/mnemix/issues"
+Changelog = "https://github.com/micahcourey/mnemix/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = [
@@ -36,14 +36,14 @@ release = [
 ]
 
 [tool.setuptools.dynamic]
-version = { attr = "temporal_plane._version.__version__" }
+version = { attr = "mnemix._version.__version__" }
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["temporal_plane*"]
+include = ["mnemix*", "mnemix*"]
 
 [tool.setuptools.package-data]
-temporal_plane = ["_bin/*"]
+mnemix = ["_bin/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

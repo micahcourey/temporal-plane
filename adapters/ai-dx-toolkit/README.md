@@ -1,18 +1,18 @@
-# AI DX Toolkit — Temporal Plane Adapter
+# AI DX Toolkit — Mnemix Adapter
 
 This adapter bridges the [AI DX Toolkit](https://github.com/ai-dx-toolkit) memory
-event model to the [Temporal Plane](../../README.md) local-first memory layer.
+event model to the [Mnemix](../../README.md) local-first memory layer.
 
 ## Scope
 
-- Maps toolkit memory events (observations, decisions) to Temporal Plane `remember` calls
+- Maps toolkit memory events (observations, decisions) to Mnemix `remember` calls
 - Provides layered context retrieval via `recall` for agent prompt injection
 - Exposes session-level checkpointing for safe pre-operation snapshots
-- Depends only on the public `temporal_plane` Python package — no LanceDB internals
+- Depends only on the public `mnemix` Python package — no LanceDB internals
 
 ## Installation
 
-Install the `temporal-plane` Python package from the workspace root, then use this
+Install the `mnemix` Python package from the workspace root, then use this
 adapter module directly:
 
 ```bash
@@ -23,9 +23,9 @@ cd python && pip install -e ".[dev]"
 
 ```python
 from pathlib import Path
-from temporal_plane_adapter import TemporalPlaneAdapter
+from mnemix_adapter import MnemixAdapter
 
-adapter = TemporalPlaneAdapter(store=Path(".temporal-plane"))
+adapter = MnemixAdapter(store=Path(".mnemix"))
 adapter.ensure_store()
 
 # Record a toolkit observation
@@ -83,7 +83,7 @@ pytest tests/
 
 ## Design Principles
 
-- The adapter uses only public `temporal_plane` package APIs.
+- The adapter uses only public `mnemix` package APIs.
 - No LanceDB or lance-specific assumptions are made here.
 - Core semantics (pinning, layered recall, checkpoints) stay aligned with the CLI surface.
 - Defer direct FFI or PyO3 bindings until a dedicated stable Rust application API exists.

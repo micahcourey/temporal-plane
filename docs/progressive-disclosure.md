@@ -1,4 +1,4 @@
-# Temporal Plane Progressive Disclosure
+# Mnemix Progressive Disclosure
 
 **Status:** scaffold placeholder
 

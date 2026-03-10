@@ -1,0 +1,34 @@
+[package]
+name = "mnemix-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+description = "CLI entry point for Mnemix"
+keywords.workspace = true
+categories.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+clap = { version = "4.5.53", features = ["derive"] }
+humantime.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+mnemix-core = { package = "mnemix-core", path = "../mnemix-core" }
+mnemix-lancedb = { package = "mnemix-lancedb", path = "../mnemix-lancedb" }
+thiserror.workspace = true
+
+[[bin]]
+name = "mnemix"
+path = "src/main.rs"
+
+[dev-dependencies]
+assert_cmd = "2.1.1"
+insta = "1.44.1"
+tempfile = "3.23.0"

@@ -1,4 +1,4 @@
-# Temporal Plane
+# Mnemix
 
 > A lightweight, inspectable, local-first memory engine for AI coding agents — with built-in version history and time-travel.
 
@@ -16,7 +16,7 @@
   }
 }}%%
 mindmap
-  root((🧠 Temporal Plane))
+  root((🧠 Mnemix))
     📝 Remember
       observations
       decisions
@@ -40,7 +40,7 @@ mindmap
       import / export
 ```
 
-AI coding agents have no continuous memory. Every session starts cold. Temporal Plane changes that — giving your agent a structured, local memory store that persists between sessions, supports rich retrieval, and lets you inspect, restore, and version everything.
+AI coding agents have no continuous memory. Every session starts cold. Mnemix changes that — giving your agent a structured, local memory store that persists between sessions, supports rich retrieval, and lets you inspect, restore, and version everything.
 
 No cloud, no daemon, no configuration sprawl. Just a local store on your filesystem that your agent can write to and read from, with a clean CLI and Python client sitting on top.
 
@@ -53,7 +53,7 @@ An agent calls `remember` to persist an observation, decision, or fact. Later se
 ```mermaid
 sequenceDiagram
     participant A as 🤖 AI Agent
-    participant TP as Temporal Plane
+    participant TP as Mnemix
     participant S as 💾 Local Store
 
     rect rgb(15, 118, 110)
@@ -104,28 +104,28 @@ This **progressive disclosure** pattern means you never flood an agent's context
 
 ### Install from PyPI
 
-On supported platforms, the PyPI wheel bundles the `temporal-plane` CLI binary:
+On supported platforms, the PyPI wheel bundles the `mnemix` CLI binary:
 
 ```bash
-pip install temporal-plane
+pip install mnemix
 ```
 
 If no bundled wheel is available for your platform, install the CLI from source:
 
 ```bash
-cargo install --path crates/temporal-plane-cli
+cargo install --path crates/mnemix-cli
 ```
 
 ### Initialize a store
 
 ```bash
-temporal-plane --store .temporal-plane init
+mnemix --store .mnemix init
 ```
 
 ### Persist a memory
 
 ```bash
-temporal-plane --store .temporal-plane remember \
+mnemix --store .mnemix remember \
   --id mem-001 \
   --scope my-project \
   --kind observation \
@@ -139,19 +139,19 @@ temporal-plane --store .temporal-plane remember \
 ### Recall context
 
 ```bash
-temporal-plane --store .temporal-plane recall --scope my-project
+mnemix --store .mnemix recall --scope my-project
 ```
 
 ### Search
 
 ```bash
-temporal-plane --store .temporal-plane search --text "storage decision" --scope my-project
+mnemix --store .mnemix search --text "storage decision" --scope my-project
 ```
 
 ### Checkpoint before a risky operation
 
 ```bash
-temporal-plane --store .temporal-plane checkpoint \
+mnemix --store .mnemix checkpoint \
   --name before-refactor \
   --description "Stable state before large codebase restructure"
 ```
@@ -159,7 +159,7 @@ temporal-plane --store .temporal-plane checkpoint \
 ### Restore to a prior state
 
 ```bash
-temporal-plane --store .temporal-plane restore --checkpoint before-refactor
+mnemix --store .mnemix restore --checkpoint before-refactor
 ```
 
 ---
@@ -169,16 +169,16 @@ temporal-plane --store .temporal-plane restore --checkpoint before-refactor
 Install from PyPI:
 
 ```bash
-pip install temporal-plane
+pip install mnemix
 ```
 
-> On supported platforms, the wheel includes the `temporal-plane` CLI binary and works without any extra setup. If you are on an unsupported platform or using a source install, install the CLI separately and ensure it is on `PATH`, or set `TP_BINARY=/path/to/temporal-plane`.
+> On supported platforms, the wheel includes the `mnemix` CLI binary and works without any extra setup. If you are on an unsupported platform or using a source install, install the CLI separately and ensure it is on `PATH`, or set `MNEMIX_BINARY=/path/to/mnemix`.
 
 ```python
 from pathlib import Path
-from temporal_plane import TemporalPlane, RememberRequest
+from mnemix import Mnemix, RememberRequest
 
-tp = TemporalPlane(store=Path(".temporal-plane"))
+tp = Mnemix(store=Path(".mnemix"))
 tp.init()
 
 tp.remember(RememberRequest(
@@ -235,13 +235,13 @@ Every write creates a new immutable version:
 
 ```bash
 # List versions
-temporal-plane --store .temporal-plane versions
+mnemix --store .mnemix versions
 
 # Create a named checkpoint
-temporal-plane --store .temporal-plane checkpoint --name stable-baseline
+mnemix --store .mnemix checkpoint --name stable-baseline
 
 # Restore the store to a named checkpoint
-temporal-plane --store .temporal-plane restore --checkpoint stable-baseline
+mnemix --store .mnemix restore --checkpoint stable-baseline
 ```
 
 Restore creates a **new head state** from the prior version — it does not discard history.
@@ -251,15 +251,16 @@ Restore creates a **new head state** from the prior version — it does not disc
 ## Repository structure
 
 ```
-temporal-plane/
+mnemix/
 ├── crates/
-│   ├── temporal-plane-core/       # Domain model, traits, typed errors
-│   ├── temporal-plane-lancedb/    # LanceDB + Lance storage backend
-│   ├── temporal-plane-cli/        # Human-facing CLI with human + JSON output
-│   ├── temporal-plane-types/      # Shared value objects and contracts
-│   └── temporal-plane-test-support/
-├── python/                        # Python package (temporal-plane on PyPI)
-│   └── temporal_plane/
+│   ├── mnemix-core/       # Mnemix core crate source path
+│   ├── mnemix-lancedb/    # Mnemix LanceDB backend source path
+│   ├── mnemix-cli/        # Mnemix CLI source path
+│   ├── mnemix-types/      # Shared value objects and contracts
+│   └── mnemix-test-support/
+├── python/                        # Python package (mnemix on PyPI)
+│   ├── mnemix/
+│   └── mnemix/
 ├── adapters/
 │   └── ai-dx-toolkit/             # AI DX Toolkit adapter proof-of-concept
 ├── examples/                      # Runnable usage examples
@@ -270,11 +271,11 @@ temporal-plane/
 
 | Crate | Responsibility |
 |-------|---------------|
-| `temporal-plane-core` | Domain types, traits, typed errors — no storage-specific code |
-| `temporal-plane-lancedb` | All LanceDB and Lance storage details, behind core traits |
-| `temporal-plane-cli` | CLI parsing, command dispatch, human + JSON output rendering |
-| `temporal-plane-types` | Shared value objects and request/response contracts |
-| `temporal-plane-test-support` | Deterministic test fixtures — non-production only |
+| `mnemix-core` | Domain types, traits, typed errors — no storage-specific code |
+| `mnemix-lancedb` | All LanceDB and Lance storage details, behind core traits |
+| `mnemix-cli` | CLI parsing, command dispatch, human + JSON output rendering |
+| `mnemix-types` | Shared value objects and request/response contracts |
+| `mnemix-test-support` | Deterministic test fixtures — non-production only |
 
 The core crate is intentionally storage-agnostic. LanceDB details never leak into it.
 
@@ -287,8 +288,8 @@ The Python package is a thin subprocess wrapper over the CLI's `--json` output s
 ```mermaid
 flowchart TD
     A(["🐍 Python Agent"])
-    B["temporal-plane CLI<br/>--json output surface"]
-    C["temporal-plane-lancedb<br/>Rust storage backend"]
+    B["mnemix CLI<br/>--json output surface"]
+    C["mnemix-lancedb<br/>Rust storage backend"]
     D[("Lance dataset<br/>on filesystem")]
 
     A -- "subprocess + --json" --> B
@@ -346,8 +347,8 @@ The workspace is configured with:
 
 ## Documentation
 
-- [Architecture and plan](docs/temporal-plane-plan-v3.md)
-- [Roadmap and milestones](docs/temporal-plane-roadmap.md)
+- [Architecture and plan](docs/mnemix-plan-v3.md)
+- [Roadmap and milestones](docs/mnemix-roadmap.md)
 - [LanceDB Rust SDK agent guide](docs/lancedb-rust-sdk-agent-guide.md)
 - [Checkpoint and retention policy](docs/checkpoint-and-retention-policy.md)
 - [Versioning and restore](docs/versioning-and-restore.md)

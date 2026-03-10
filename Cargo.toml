@@ -1,23 +1,23 @@
 [workspace]
 resolver = "3"
 members = [
-    "crates/temporal-plane-cli",
-    "crates/temporal-plane-core",
-    "crates/temporal-plane-lancedb",
-    "crates/temporal-plane-test-support",
-    "crates/temporal-plane-types",
+    "crates/mnemix-cli",
+    "crates/mnemix-core",
+    "crates/mnemix-lancedb",
+    "crates/mnemix-test-support",
+    "crates/mnemix-types",
 ]
 
 [workspace.package]
 edition = "2024"
 version = "0.1.0"
 license = "MIT"
-repository = "https://github.com/micahcourey/temporal-plane"
-homepage = "https://github.com/micahcourey/temporal-plane"
-documentation = "https://github.com/micahcourey/temporal-plane/tree/main/docs"
+repository = "https://github.com/micahcourey/mnemix"
+homepage = "https://github.com/micahcourey/mnemix"
+documentation = "https://github.com/micahcourey/mnemix/tree/main/docs"
 rust-version = "1.94"
 authors = ["Micah Courey"]
-description = "Temporal Plane: a local-first memory layer for AI coding agents"
+description = "Mnemix: a local-first memory layer for AI coding agents"
 keywords = ["memory", "agents", "lancedb", "time-travel", "local-first"]
 categories = ["command-line-utilities", "database", "development-tools"]
 

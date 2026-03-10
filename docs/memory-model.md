@@ -1,4 +1,4 @@
-# Temporal Plane Memory Model
+# Mnemix Memory Model
 
 **Status:** scaffold placeholder
 

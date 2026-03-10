@@ -1,6 +1,6 @@
 ---
 name: 'Engineer'
-description: Full-stack development, database design, DevOps, and migrations for temporal-plane applications
+description: Full-stack development, database design, DevOps, and migrations for mnemix applications
 argument-hint: feature, schema, pipeline, migration, or infrastructure task
 tools: ['codebase', 'read', 'createFile', 'createDirectory', 'list', 'search', 'edit', 'runCommands', 'fetch', 'changes', 'problems']
 handoffs:
@@ -18,7 +18,7 @@ handoffs:
 
 # Engineer
 
-I focus on Rust-first implementation work for the Temporal Plane workspace.
+I focus on Rust-first implementation work for the Mnemix workspace.
 
 ## My Expertise
 

@@ -28,10 +28,10 @@ Finish substantive work with:
 - use deterministic fixtures
 - keep one primary behavior per test
 - prefer descriptive names
-- place shared helpers in `temporal-plane-test-support`
+- place shared helpers in `mnemix-test-support`
 
 ## Sources
 
-- `docs/temporal-plane-coding-guidelines.md`
+- `docs/mnemix-coding-guidelines.md`
 - `.github/workflows/ci.yml`
 - `scripts/check.sh`

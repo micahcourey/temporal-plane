@@ -2,7 +2,7 @@
 
 **Status:** advanced workflow
 
-Temporal Plane keeps branch-aware storage as an advanced capability.
+Mnemix keeps branch-aware storage as an advanced capability.
 The v1 product model does not require branch UX in the CLI, but the storage layer can use branches for isolated experiments, staged imports, and clone-oriented recovery flows.
 
 ## Branches vs checkpoints
@@ -88,6 +88,6 @@ Milestone 7 does **not** change the stable v1 product model.
 
 Instead it adds internal storage capabilities that support future advanced workflows while keeping:
 
-- storage-specific details out of `temporal-plane-core`
+- storage-specific details out of `mnemix-core`
 - branch UX out of normal CLI help
 - restore and checkpoint semantics unchanged for standard users

@@ -1,4 +1,4 @@
-# Temporal Plane Export and Import
+# Mnemix Export and Import
 
 **Status:** scaffold placeholder
 
