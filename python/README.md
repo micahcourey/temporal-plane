@@ -13,6 +13,18 @@ wraps its `--json` output surface; no core behavior is duplicated here.
   `cargo install --path crates/temporal-plane-cli`) or set
   `TP_BINARY=/path/to/temporal-plane`
 
+## Installation
+
+Install the Python wrapper from PyPI:
+
+```bash
+pip install temporal-plane
+```
+
+The package does not bundle the Rust CLI binary. Install the CLI separately and
+ensure `temporal-plane` is on `PATH`, or set `TP_BINARY` to an explicit binary
+path.
+
 ## Installation (development)
 
 ```bash
@@ -86,6 +98,17 @@ cd python
 pip install -e ".[dev]"
 pytest
 ```
+
+## Release Validation
+
+Before publishing a new version:
+
+```bash
+./scripts/check-python-package.sh
+```
+
+This runs Python tests, builds the wheel and sdist, and validates package
+metadata rendering with `twine check`.
 
 ## Binding Strategy
 

@@ -41,11 +41,15 @@ jobs:
           python-version: "3.11"
 
       - name: Install build
-        run: pip install build
+        run: pip install build twine
 
       - name: Build package
         working-directory: python
         run: python -m build
+
+      - name: Validate package metadata
+        working-directory: python
+        run: python -m twine check dist/*
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
