@@ -42,6 +42,9 @@ version = { attr = "temporal_plane._version.__version__" }
 where = ["."]
 include = ["temporal_plane*"]
 
+[tool.setuptools.package-data]
+temporal_plane = ["_bin/*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]

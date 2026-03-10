@@ -12,11 +12,13 @@ re-raised to callers.
 
 from __future__ import annotations
 
+from importlib import resources
 import json
 import os
 import shutil
 import subprocess
 from pathlib import Path
+import sys
 from typing import Any
 
 from .errors import (
@@ -31,12 +33,29 @@ _ENV_BINARY = "TP_BINARY"
 _BINARY_NAME = "temporal-plane"
 
 
+def _platform_binary_name() -> str:
+    if sys.platform == "win32":
+        return f"{_BINARY_NAME}.exe"
+    return _BINARY_NAME
+
+
+def _find_bundled_binary() -> str | None:
+    """Return the packaged CLI binary path when the wheel bundles one."""
+    candidate = resources.files("temporal_plane").joinpath(
+        "_bin", _platform_binary_name()
+    )
+    if candidate.is_file():
+        return os.fspath(candidate)
+    return None
+
+
 def _find_binary() -> str:
     """Return the path to the ``temporal-plane`` binary.
 
     Resolution order:
     1. ``TP_BINARY`` environment variable.
-    2. ``temporal-plane`` on ``PATH`` via :func:`shutil.which`.
+    2. Bundled wheel binary, if present.
+    3. ``temporal-plane`` on ``PATH`` via :func:`shutil.which`.
 
     Raises:
         TemporalPlaneBinaryNotFoundError: if the binary cannot be found.
@@ -45,13 +64,18 @@ def _find_binary() -> str:
     if from_env:
         return from_env
 
-    found = shutil.which(_BINARY_NAME)
+    bundled = _find_bundled_binary()
+    if bundled:
+        return bundled
+
+    found = shutil.which(_platform_binary_name())
     if found:
         return found
 
     raise TemporalPlaneBinaryNotFoundError(
-        f"Could not find the '{_BINARY_NAME}' binary. "
-        f"Install the Temporal Plane CLI or set the {_ENV_BINARY} environment "
+        f"Could not find the '{_platform_binary_name()}' binary. "
+        "Install a Temporal Plane wheel that bundles the CLI, install the "
+        f"Temporal Plane CLI separately, or set the {_ENV_BINARY} environment "
         "variable to the absolute path of the binary."
     )
 

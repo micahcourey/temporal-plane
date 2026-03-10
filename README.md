@@ -102,9 +102,15 @@ This **progressive disclosure** pattern means you never flood an agent's context
 
 ## Quick start
 
-### Install the CLI
+### Install from PyPI
 
-Build from source:
+On supported platforms, the PyPI wheel bundles the `temporal-plane` CLI binary:
+
+```bash
+pip install temporal-plane
+```
+
+If no bundled wheel is available for your platform, install the CLI from source:
 
 ```bash
 cargo install --path crates/temporal-plane-cli
@@ -166,7 +172,7 @@ Install from PyPI:
 pip install temporal-plane
 ```
 
-> The package does not bundle the CLI binary. Install `temporal-plane` separately and ensure it is on `PATH`, or set `TP_BINARY=/path/to/temporal-plane`.
+> On supported platforms, the wheel includes the `temporal-plane` CLI binary and works without any extra setup. If you are on an unsupported platform or using a source install, install the CLI separately and ensure it is on `PATH`, or set `TP_BINARY=/path/to/temporal-plane`.
 
 ```python
 from pathlib import Path
