@@ -67,7 +67,7 @@ Release verification for this package is primarily automated through Python test
 
 | Test Type | Total | Passed | Failed | Skipped | Status |
 |-----------|-------|--------|--------|---------|--------|
-| Automated | 56 Python tests plus `build` and `twine check` | 58 | 0 | 0 | Pass |
+| Automated | 58 (56 Python tests plus `build` and `twine check`) | 58 | 0 | 0 | Pass |
 | Manual | 4 packaging and install scenarios | 4 | 0 | 0 | Pass |
 
 ## Deployment Checklist

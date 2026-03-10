@@ -101,14 +101,18 @@ pytest
 
 ## Release Validation
 
-Before publishing a new version:
+Before publishing a new version, from a local clone of this repository run the
+release checks from the repository root:
 
 ```bash
+# From the repository root (source checkout)
 ./scripts/check-python-package.sh
 ```
 
 This runs Python tests, builds the wheel and sdist, and validates package
-metadata rendering with `twine check`.
+metadata rendering with `twine check`. It also installs the freshly built wheel
+into a clean virtual environment and verifies that `temporal_plane` imports and
+exposes `__version__` correctly.
 
 ## Binding Strategy
 

@@ -16,11 +16,29 @@ if [[ -z "$PYTHON" ]]; then
 fi
 
 VENV_DIR=".release-venv"
-"$PYTHON" -m venv "$VENV_DIR"
+INSTALL_VENV_DIR=".release-install-venv"
+
+cleanup() {
+	rm -rf "$VENV_DIR" "$INSTALL_VENV_DIR"
+}
+
+trap cleanup EXIT
+
+"$PYTHON" -m venv --clear "$VENV_DIR"
 source "$VENV_DIR/bin/activate"
 
 python -m pip install --upgrade pip
 python -m pip install -e ".[dev,release]"
 python -m pytest
+rm -rf dist build
 python -m build
-python -m twine check dist/*
+python -m twine check --strict dist/*
+
+deactivate
+
+"$PYTHON" -m venv --clear "$INSTALL_VENV_DIR"
+source "$INSTALL_VENV_DIR/bin/activate"
+
+python -m pip install --upgrade pip
+python -m pip install dist/*.whl
+python -c 'import temporal_plane; print(temporal_plane.__version__)'
