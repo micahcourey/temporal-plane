@@ -353,7 +353,7 @@ The workspace is configured with:
 - [Versioning and restore](docs/versioning-and-restore.md)
 - [Branch lifecycle](docs/branch-lifecycle.md)
 - [Python package README](python/README.md)
-- [PyPI release plan](docs/pypi-release-plan.md)
+- [Release checklist](docs/release-checklist.md)
 
 ---
 
