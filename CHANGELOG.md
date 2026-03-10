@@ -6,6 +6,11 @@ The format is inspired by Keep a Changelog and semantic versioning.
 
 ## [Unreleased]
 
+### Fixed
+
+- Release preparation now installs `protoc` in the tag-triggered workflow so release builds match CI and bundled-wheel publish jobs.
+- Release notes and release checklist coverage now include the recurring Git and GitHub release commands used for recovery and normal publishes.
+
 ## [0.1.0] - 2026-03-09
 
 ### Added
