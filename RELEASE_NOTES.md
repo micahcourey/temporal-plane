@@ -1,6 +1,6 @@
 # Production Readiness Review (PRR)
 
-Mnemix `v0.2.0` is the first public release under the Mnemix name. This release carries forward the existing local-first memory engine, Python binding, bundled-wheel packaging, and advanced storage workflows, while updating the public package, CLI, crate, and documentation surfaces to the Mnemix brand. Deployment is handled through the existing GitHub Release to PyPI trusted-publishing workflow.
+Mnemix `v0.2.1` is the first public release under the Mnemix name. This release carries forward the existing local-first memory engine, Python binding, bundled-wheel packaging, and advanced storage workflows, while updating the public package, CLI, crate, and documentation surfaces to the Mnemix brand. Deployment is handled through the existing GitHub Release to PyPI trusted-publishing workflow.
 
 ---
 
@@ -10,7 +10,7 @@ Mnemix `v0.2.0` is the first public release under the Mnemix name. This release 
 |-------|-------|
 | **Release Date** | 2026-03-10 |
 | **Release Window** | 21:54 UTC |
-| **Version** | `v0.2.0` |
+| **Version** | `v0.2.1` |
 | **Release Type** | Minor |
 | **Release Epic** | `#28` |
 
@@ -22,7 +22,7 @@ This release publishes the first PyPI package under the `mnemix` name and aligns
 |--------|---------|--------|
 | `#26` | Rebrand Temporal Plane to Mnemix across public surfaces | Done |
 | `#24` | Bundle CLI in platform-specific PyPI wheels | Done |
-| `#28` | Prepare v0.2.0 release checklist and version bump | Done |
+| `#28` | Prepare v0.2.1 release checklist and version bump | Done |
 
 ## Stakeholders Approval & Notifications
 
@@ -79,7 +79,7 @@ Release verification combined automated package validation with local release-pr
 - [x] Smoke tests passing
 - [x] Monitoring and alerts active
 - [x] Rollback plan documented
-- [x] GitHub Release published from tag `v0.2.0`
+- [x] GitHub Release published from tag `v0.2.1`
 
 ## Production Post-Deployment Verification
 
@@ -92,7 +92,7 @@ Release verification combined automated package validation with local release-pr
 
 ## Release Statistics
 
-GitHub release: https://github.com/micahcourey/mnemix/releases/tag/v0.2.0
+GitHub release: https://github.com/micahcourey/mnemix/releases/tag/v0.2.1
 
 | Metric | Value |
 |--------|-------|
@@ -103,10 +103,10 @@ GitHub release: https://github.com/micahcourey/mnemix/releases/tag/v0.2.0
 
 ## Notes & Miscellaneous Items
 
-The live release exists at `v0.2.0` and targets `main`. If the release notes need to be updated after publication, edit the release body in place with:
+The live release exists at `v0.2.1` and targets `main`. If the release notes need to be updated after publication, edit the release body in place with:
 
 ```bash
-gh release edit v0.2.0 --notes-file RELEASE_NOTES.md
+gh release edit v0.2.1 --notes-file RELEASE_NOTES.md
 ```
 
 Updating the release notes does not republish artifacts or rerun the PyPI workflow.
