@@ -30,6 +30,11 @@ if _bdist_wheel is not None:
         def get_tag(self) -> tuple[str, str, str]:
             python_tag, abi_tag, platform_tag = super().get_tag()
             if _has_bundled_cli():
+                if platform_tag == "linux_x86_64":
+                    # PyPI rejects generic 'linux_x86_64' tags.
+                    # Since we are bundling a binary built on Ubuntu 22.04+, 
+                    # we use a compatible manylinux tag.
+                    platform_tag = "manylinux_2_35_x86_64"
                 return ("py3", "none", platform_tag)
             return (python_tag, abi_tag, platform_tag)
 
