@@ -3,9 +3,9 @@ layout: doc
 ---
 
 <script setup>
-import { useRouter } from 'vitepress'
+import { onMounted } from 'vue'
 
-if (typeof window !== 'undefined') {
+onMounted(() => {
   window.location.replace('/guide/')
-}
+})
 </script>
