@@ -1247,7 +1247,8 @@ impl AdvancedStorageBackend for LanceDbBackend {
     fn delete_branch(&mut self, name: &BranchName) -> Result<(), Self::Error> {
         let memories_uri = self.table_uri(&self.memories)?;
         let mut dataset = self.load_lance_dataset(&memories_uri)?;
-        let branches: HashMap<String, BranchContents> = self.block_on_lance(dataset.list_branches())?;
+        let branches: HashMap<String, BranchContents> =
+            self.block_on_lance(dataset.list_branches())?;
         let Some(contents) = branches.get(name.as_str()) else {
             return Err(LanceDbError::BranchNotFound {
                 name: name.as_str().to_owned(),
