@@ -3,8 +3,8 @@ const { Jimp } = require('jimp');
 async function processIcon() {
     const image = await Jimp.read('public/logo.png');
 
-    // The original image is 640x640 with text at the bottom. Crop to the top 500 pixels.
-    image.crop({ x: 0, y: 0, w: 640, h: 500 });
+    // The original image is 640x640 with text at the bottom. Crop to the top 450 pixels.
+    image.crop({ x: 0, y: 0, w: 640, h: 450 });
 
     // Convert dark background to transparent
     image.scan(0, 0, image.bitmap.width, image.bitmap.height, function (x, y, idx) {

@@ -66,6 +66,7 @@ const styles = {
         width: '100%',
         maxWidth: '400px',
         height: 'auto',
+        borderRadius: '50%',
         filter: 'drop-shadow(0 0 40px rgba(20, 184, 166, 0.4))',
     },
     headline: {
