@@ -1240,14 +1240,14 @@ impl AdvancedStorageBackend for LanceDbBackend {
             .map(|(name, contents)| Self::branch_record_from_contents(name, &contents))
             .collect::<Result<Vec<_>, _>>()?;
 
-        branches.sort_by(|left, right| left.name().cmp(right.name()));
+        branches.sort_by(|left: &BranchRecord, right: &BranchRecord| left.name().cmp(right.name()));
         Ok(BranchListResult::new(branches))
     }
 
     fn delete_branch(&mut self, name: &BranchName) -> Result<(), Self::Error> {
         let memories_uri = self.table_uri(&self.memories)?;
         let mut dataset = self.load_lance_dataset(&memories_uri)?;
-        let branches = self.block_on_lance(dataset.list_branches())?;
+        let branches: HashMap<String, BranchContents> = self.block_on_lance(dataset.list_branches())?;
         let Some(contents) = branches.get(name.as_str()) else {
             return Err(LanceDbError::BranchNotFound {
                 name: name.as_str().to_owned(),
@@ -1328,13 +1328,13 @@ impl LanceDbBackend {
             Err(error) if lancedb_error_indicates_missing_version(&error) => {
                 Err(LanceDbError::VersionNotFound { version: requested })
             }
-            Err(error) => Err(error.into()),
+            Err(error) => Err(LanceDbError::from(error)),
         }
     }
 
     fn open_latest_memories_table(&self) -> Result<Table, LanceDbError> {
         let uri = self.path.to_string_lossy().to_string();
-        let connection = self.block_on(connect(&uri).execute())?;
+        let connection: Connection = self.block_on(connect(&uri).execute())?;
         self.block_on(connection.open_table(MEMORIES_TABLE).execute())
     }
 
@@ -1425,7 +1425,7 @@ impl LanceDbBackend {
             schema,
         ));
 
-        let mut tags = self.block_on(self.memories.tags())?;
+        let mut tags: Box<dyn lancedb::table::Tags> = self.block_on(self.memories.tags())?;
         self.block_on(tags.create(name.as_str(), version))?;
 
         if let Err(error) = self.block_on(self.checkpoints.add(reader).execute()) {
@@ -1502,7 +1502,8 @@ impl StatsBackend for LanceDbBackend {
             None => Some("pinned = true".to_owned()),
         };
         let pinned_memories = self.count_memories(pinned_filter)? as u64;
-        let version_count = self.block_on(self.memories.list_versions())?.len() as u64;
+        let versions: Vec<_> = self.block_on(self.memories.list_versions())?;
+        let version_count = versions.len() as u64;
         let latest_checkpoint = self
             .list_checkpoints()?
             .into_iter()
