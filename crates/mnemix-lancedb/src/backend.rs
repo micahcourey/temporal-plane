@@ -16,7 +16,9 @@ use futures::TryStreamExt;
 use lance::dataset::{builder::DatasetBuilder as LanceDatasetBuilder, refs::BranchContents};
 use lance_index::scalar::FullTextSearchQuery;
 use lancedb::{
-    Table, connect,
+    Table,
+    arrow::SendableRecordBatchStream,
+    connect,
     connection::Connection,
     index::{Index, IndexType, scalar::FtsIndexBuilder},
     query::{ExecutableQuery, QueryBase, Select},
@@ -249,15 +251,14 @@ impl LanceDbBackend {
     /// Returns [`LanceDbError`] when the metadata table cannot be read.
     pub fn schema_version(&self) -> Result<u64, LanceDbError> {
         let batches: Vec<RecordBatch> = self.block_on(async {
-            let batches: Vec<RecordBatch> = self
+            let stream: SendableRecordBatchStream = self
                 .schema_metadata
                 .query()
                 .select(Select::Columns(vec!["schema_version".to_owned()]))
                 .limit(1)
                 .execute()
-                .await?
-                .try_collect::<Vec<RecordBatch>>()
                 .await?;
+            let batches: Vec<RecordBatch> = stream.try_collect().await?;
             Ok::<Vec<RecordBatch>, lancedb::Error>(batches)
         })?;
 
@@ -843,13 +844,12 @@ impl LanceDbBackend {
     ) -> Result<u64, LanceDbError> {
         self.block_on_backend(async {
             let mut staged_records = 0_u64;
-            let batches: Vec<RecordBatch> = source_table
+            let stream: SendableRecordBatchStream = source_table
                 .query()
                 .select(Select::Columns(vec![PAYLOAD_COLUMN.to_owned()]))
                 .execute()
-                .await?
-                .try_collect::<Vec<RecordBatch>>()
                 .await?;
+            let batches: Vec<RecordBatch> = stream.try_collect().await?;
 
             for batch in batches {
                 let Some(array): Option<&StringArray> = batch
@@ -908,11 +908,8 @@ impl LanceDbBackend {
                 query = query.limit(limit);
             }
 
-            let batches: Vec<RecordBatch> = query
-                .execute()
-                .await?
-                .try_collect::<Vec<RecordBatch>>()
-                .await?;
+            let stream: SendableRecordBatchStream = query.execute().await?;
+            let batches: Vec<RecordBatch> = stream.try_collect().await?;
             Ok::<Vec<RecordBatch>, lancedb::Error>(batches)
         })?;
 
@@ -1597,15 +1594,14 @@ async fn table_contains_memory_id_async(
     table: &Table,
     id: &MemoryId,
 ) -> Result<bool, LanceDbError> {
-    let batches: Vec<RecordBatch> = table
+    let stream: SendableRecordBatchStream = table
         .query()
         .select(Select::Columns(vec![PAYLOAD_COLUMN.to_owned()]))
         .only_if(string_filter("id", id.as_str()))
         .limit(1)
         .execute()
-        .await?
-        .try_collect::<Vec<RecordBatch>>()
         .await?;
+    let batches: Vec<RecordBatch> = stream.try_collect().await?;
 
     Ok(!batches.is_empty())
 }
