@@ -31,7 +31,8 @@ docker run --rm \
       protobuf-compiler
     curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain 1.94.0 --profile minimal
     . "$HOME/.cargo/env"
+    cp -a /work /tmp/mnemix-linux-release-src
     export CARGO_HOME=/tmp/cargo-home
     export CARGO_TARGET_DIR=/tmp/mnemix-linux-release-target
-    cargo build --manifest-path /work/Cargo.toml --release -p mnemix-cli
+    cargo build --manifest-path /tmp/mnemix-linux-release-src/Cargo.toml --release -p mnemix-cli
   '
