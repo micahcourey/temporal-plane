@@ -16,7 +16,9 @@ use futures::TryStreamExt;
 use lance::dataset::{builder::DatasetBuilder as LanceDatasetBuilder, refs::BranchContents};
 use lance_index::scalar::FullTextSearchQuery;
 use lancedb::{
-    Table, arrow::SendableRecordBatchStream, connect,
+    Table,
+    arrow::SendableRecordBatchStream,
+    connect,
     connection::Connection,
     index::{Index, IndexType, scalar::FtsIndexBuilder},
     query::{ExecutableQuery, QueryBase, Select},
