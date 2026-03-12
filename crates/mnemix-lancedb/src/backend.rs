@@ -256,7 +256,7 @@ impl LanceDbBackend {
                 .limit(1)
                 .execute()
                 .await?
-                .try_collect()
+                .try_collect::<Vec<RecordBatch>>()
                 .await?;
             Ok::<Vec<RecordBatch>, lancedb::Error>(batches)
         })?;
@@ -848,7 +848,7 @@ impl LanceDbBackend {
                 .select(Select::Columns(vec![PAYLOAD_COLUMN.to_owned()]))
                 .execute()
                 .await?
-                .try_collect()
+                .try_collect::<Vec<RecordBatch>>()
                 .await?;
 
             for batch in batches {
@@ -908,7 +908,11 @@ impl LanceDbBackend {
                 query = query.limit(limit);
             }
 
-            let batches: Vec<RecordBatch> = query.execute().await?.try_collect().await?;
+            let batches: Vec<RecordBatch> = query
+                .execute()
+                .await?
+                .try_collect::<Vec<RecordBatch>>()
+                .await?;
             Ok::<Vec<RecordBatch>, lancedb::Error>(batches)
         })?;
 
@@ -1600,7 +1604,7 @@ async fn table_contains_memory_id_async(
         .limit(1)
         .execute()
         .await?
-        .try_collect()
+        .try_collect::<Vec<RecordBatch>>()
         .await?;
 
     Ok(!batches.is_empty())
