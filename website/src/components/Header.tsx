@@ -9,7 +9,7 @@ export default function Header() {
       <div className="container" style={styles.container}>
         <div style={styles.logoGroup}>
           <img src="/icon.png?v=2" alt="Mnemix Logo" style={styles.logoImage} />
-          <span style={styles.logoText}>MNEMIXS</span>
+          <span style={styles.logoText}>MNEMIX</span>
         </div>
 
         <nav className="desktop-nav" style={styles.nav}>
