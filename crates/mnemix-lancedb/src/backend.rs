@@ -248,15 +248,17 @@ impl LanceDbBackend {
     ///
     /// Returns [`LanceDbError`] when the metadata table cannot be read.
     pub fn schema_version(&self) -> Result<u64, LanceDbError> {
-        let batches = self.block_on(async {
-            self.schema_metadata
+        let batches: Vec<RecordBatch> = self.block_on(async {
+            let batches: Vec<RecordBatch> = self
+                .schema_metadata
                 .query()
                 .select(Select::Columns(vec!["schema_version".to_owned()]))
                 .limit(1)
                 .execute()
                 .await?
-                .try_collect::<Vec<_>>()
-                .await
+                .try_collect()
+                .await?;
+            Ok::<Vec<RecordBatch>, lancedb::Error>(batches)
         })?;
 
         let Some(batch) = batches.first() else {
@@ -449,7 +451,7 @@ impl LanceDbBackend {
         ) {
             Ok(_)
             | Err(lancedb::Error::NotSupported { .. } | lancedb::Error::IndexNotFound { .. }) => {}
-            Err(error) => return Err(error.into()),
+            Err(error) => return Err(LanceDbError::from(error)),
         }
 
         let prune_stats = if request.prune_old_versions() {
@@ -622,7 +624,7 @@ impl LanceDbBackend {
     }
 
     fn ensure_fts_index(&self) -> Result<(), LanceDbError> {
-        let indices = self.block_on(self.memories.list_indices())?;
+        let indices: Vec<_> = self.block_on(self.memories.list_indices())?;
         let has_fts = indices.iter().any(|index| {
             index.index_type == IndexType::FTS && index.columns == ["fts_text".to_owned()]
         });
@@ -825,9 +827,8 @@ impl LanceDbBackend {
         )?;
 
         let cloned_backend = Self::open(destination)?;
-        let version_count = cloned_backend
-            .block_on(cloned_backend.memories.list_versions())?
-            .len() as u64;
+        let versions: Vec<_> = cloned_backend.block_on(cloned_backend.memories.list_versions())?;
+        let version_count = versions.len() as u64;
         Ok(CloneInfo::new(
             destination.to_path_buf(),
             version_count,
@@ -842,13 +843,15 @@ impl LanceDbBackend {
     ) -> Result<u64, LanceDbError> {
         self.block_on_backend(async {
             let mut staged_records = 0_u64;
-            let mut stream = source_table
+            let batches: Vec<RecordBatch> = source_table
                 .query()
                 .select(Select::Columns(vec![PAYLOAD_COLUMN.to_owned()]))
                 .execute()
+                .await?
+                .try_collect()
                 .await?;
 
-            while let Some(batch) = stream.try_next().await? {
+            for batch in batches {
                 let Some(array): Option<&StringArray> = batch
                     .column_by_name(PAYLOAD_COLUMN)
                     .and_then(|column: &Arc<dyn Array>| {
@@ -1590,15 +1593,17 @@ async fn table_contains_memory_id_async(
     table: &Table,
     id: &MemoryId,
 ) -> Result<bool, LanceDbError> {
-    let mut stream = table
+    let batches: Vec<RecordBatch> = table
         .query()
         .select(Select::Columns(vec![PAYLOAD_COLUMN.to_owned()]))
         .only_if(string_filter("id", id.as_str()))
         .limit(1)
         .execute()
+        .await?
+        .try_collect()
         .await?;
 
-    Ok(stream.try_next().await?.is_some())
+    Ok(!batches.is_empty())
 }
 
 fn memory_record_batch(record: &MemoryRecord) -> Result<(Arc<Schema>, RecordBatch), LanceDbError> {
