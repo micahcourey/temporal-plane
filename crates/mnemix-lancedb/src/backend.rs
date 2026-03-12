@@ -917,8 +917,7 @@ impl LanceDbBackend {
         for batch in batches {
             let batch: RecordBatch = batch;
             let column: &Arc<dyn Array> = batch.column(0);
-            let Some(array): Option<&StringArray> =
-                column.as_any().downcast_ref::<StringArray>()
+            let Some(array): Option<&StringArray> = column.as_any().downcast_ref::<StringArray>()
             else {
                 return Err(LanceDbError::InvalidData {
                     field: PAYLOAD_COLUMN,
