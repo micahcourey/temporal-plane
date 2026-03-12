@@ -14,6 +14,7 @@ require_command() {
 require_command docker
 
 docker run --rm \
+  --platform linux/amd64 \
   -v "$repo_root:/work:ro" \
   ubuntu:22.04 \
   bash -lc '
@@ -26,6 +27,7 @@ docker run --rm \
       clang \
       cmake \
       curl \
+      libprotobuf-dev \
       libssl-dev \
       pkg-config \
       protobuf-compiler
@@ -34,5 +36,6 @@ docker run --rm \
     cp -a /work /tmp/mnemix-linux-release-src
     export CARGO_HOME=/tmp/cargo-home
     export CARGO_TARGET_DIR=/tmp/mnemix-linux-release-target
+    export PROTOC_INCLUDE=/usr/include
     cargo build --manifest-path /tmp/mnemix-linux-release-src/Cargo.toml --release -p mnemix-cli
   '
