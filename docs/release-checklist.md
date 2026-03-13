@@ -140,6 +140,8 @@ main branch
   `./scripts/publish-release.sh X.Y.Z`
   Note:
   `./scripts/publish-release.sh X.Y.Z` now runs `./scripts/check-linux-release-build.sh` before creating the tag.
+  Apple Silicon note:
+  On an ARM macOS host using an ARM Docker daemon, the publish script skips the local Docker Linux preflight and relies on the merged Linux CI checks for that release commit.
 8. Wait for `.github/workflows/publish-python.yml` to complete successfully.
 9. Verify the new version on PyPI and in a clean install.
 

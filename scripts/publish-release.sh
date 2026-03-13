@@ -45,6 +45,15 @@ require_command() {
   fi
 }
 
+should_skip_linux_preflight() {
+  local host_arch docker_arch
+
+  host_arch="$(uname -m)"
+  docker_arch="$(docker info --format '{{.Architecture}}' 2>/dev/null || true)"
+
+  [[ "$host_arch" == "arm64" && ( "$docker_arch" == "aarch64" || "$docker_arch" == "arm64" ) ]]
+}
+
 run() {
   if [[ "$dry_run" == "true" ]]; then
     printf '[dry-run] %q' "$@"
@@ -125,7 +134,11 @@ if [[ "$workspace_version" != "$version" || "$python_version" != "$version" ]]; 
   exit 1
 fi
 
-run ./scripts/check-linux-release-build.sh
+if should_skip_linux_preflight; then
+  echo "warning: skipping local Docker Linux preflight on Apple Silicon ARM Docker; rely on merged Linux CI for the release commit" >&2
+else
+  run ./scripts/check-linux-release-build.sh
+fi
 run git tag -a "$tag" -m "$tag"
 run git push origin "$tag"
 run gh release create "$tag" --title "$tag" --generate-notes
