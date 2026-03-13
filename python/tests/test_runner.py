@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from mnemix._runner import run
+from mnemix._runner import main, main_alias, run
 from mnemix.errors import (
     MnemixBinaryNotFoundError,
     MnemixCommandError,
@@ -67,6 +67,38 @@ class TestFindBinary:
             from mnemix._runner import _platform_binary_name
 
             assert _platform_binary_name() == "mnemix.exe"
+            assert _platform_binary_name("mx") == "mx.exe"
+
+    def test_binary_alias_uses_bundled_alias_when_present(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("MNEMIX_BINARY", raising=False)
+        assert_path = "/wheel/mx"
+        with patch("mnemix._runner._find_bundled_binary", return_value=assert_path), \
+             patch("shutil.which", return_value=None):
+            from mnemix._runner import _find_binary
+
+            assert _find_binary("mx") == assert_path
+
+
+class TestConsoleScripts:
+    def test_main_entrypoint_runs_mnemix_binary(self) -> None:
+        with patch("mnemix._runner._find_binary", return_value="/wheel/mnemix") as mock_find, \
+             patch("subprocess.run", return_value=_make_result("", returncode=0)) as mock_run, \
+             patch("sys.argv", ["mnemix", "--help"]):
+            exit_code = main()
+
+        assert exit_code == 0
+        mock_find.assert_called_once_with("mnemix")
+        mock_run.assert_called_once_with(["/wheel/mnemix", "--help"], check=False)
+
+    def test_main_alias_runs_mx_binary(self) -> None:
+        with patch("mnemix._runner._find_binary", return_value="/wheel/mx") as mock_find, \
+             patch("subprocess.run", return_value=_make_result("", returncode=0)) as mock_run, \
+             patch("sys.argv", ["mx", "--help"]):
+            exit_code = main_alias()
+
+        assert exit_code == 0
+        mock_find.assert_called_once_with("mx")
+        mock_run.assert_called_once_with(["/wheel/mx", "--help"], check=False)
 
 
 class TestRunDecoding:

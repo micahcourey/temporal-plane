@@ -25,6 +25,10 @@ Repository = "https://github.com/micahcourey/mnemix"
 Issues = "https://github.com/micahcourey/mnemix/issues"
 Changelog = "https://github.com/micahcourey/mnemix/blob/main/CHANGELOG.md"
 
+[project.scripts]
+mnemix = "mnemix._runner:main"
+mx = "mnemix._runner:main_alias"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
