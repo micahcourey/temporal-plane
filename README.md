@@ -261,7 +261,12 @@ mnemix/
 ├── python/                        # Python package (mnemix on PyPI)
 │   ├── mnemix/
 ├── adapters/
-│   └── ai-dx-toolkit/             # AI DX Toolkit adapter proof-of-concept
+│   ├── _adapter_base.py           # Shared adapter utilities
+│   ├── coding_agent_adapter.py    # Coding-agent workflow adapter
+│   ├── chat_assistant_adapter.py  # Chat-assistant workflow adapter
+│   ├── ci_bot_adapter.py          # CI-bot workflow adapter
+│   ├── review_tool_adapter.py     # Review-tool workflow adapter
+│   └── tests/                     # Adapter smoke tests
 ├── examples/                      # Runnable usage examples
 └── docs/                          # Architecture and design documentation
 ```

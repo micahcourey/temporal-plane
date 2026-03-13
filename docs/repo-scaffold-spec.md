@@ -42,7 +42,12 @@ mnemix/
 │   ├── README.md
 │   └── mnemix/
 ├── adapters/
-│   └── ai-dx-toolkit/
+│   ├── _adapter_base.py
+│   ├── coding_agent_adapter.py
+│   ├── chat_assistant_adapter.py
+│   ├── ci_bot_adapter.py
+│   ├── review_tool_adapter.py
+│   └── tests/
 ├── examples/
 │   ├── basic-recall/
 │   ├── checkpoints/
@@ -107,9 +112,10 @@ Non-production helpers for:
 
 Included as a placeholder for the first binding layer, but intentionally not populated with product logic in milestone 0.
 
-### `adapters/ai-dx-toolkit/`
+### `adapters/`
 
-Included as a placeholder for the first host adapter, but intentionally deferred until later milestones.
+Included as the home for host-specific adapter layers that wrap the public
+Mnemix interfaces without owning product logic.
 
 ### `examples/`
 

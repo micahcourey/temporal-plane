@@ -93,3 +93,17 @@ This makes it easy to use published wheels, local development builds, or custom 
 - The Python package is a wrapper layer, not a second implementation.
 - JSON mode is the compatibility boundary between Python and the CLI.
 - The typed request and response models mirror the CLI response contract so changes stay explicit.
+
+## Host integrations
+
+For real agent hosts, the Python client is the foundation rather than the full
+integration surface. Host-specific policy should live in an adapter layer that
+decides:
+
+- when to recall memory
+- which memory kinds to store
+- when to checkpoint
+- when to skip writeback
+
+See [Host Adapters](/guide/host-adapters) for the workflow-specific adapter
+patterns currently included in the repository.

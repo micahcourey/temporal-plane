@@ -36,6 +36,7 @@ export default withMermaid(defineConfig({
                         { text: 'Overview', link: '/guide/' },
                         { text: 'CLI', link: '/guide/cli' },
                         { text: 'Python', link: '/guide/python' },
+                        { text: 'Host Adapters', link: '/guide/host-adapters' },
                         { text: 'Storage Foundation', link: '/guide/lancedb' }
                     ]
                 },

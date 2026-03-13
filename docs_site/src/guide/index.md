@@ -17,6 +17,7 @@ The project is built around three ideas:
 - checkpoints and version history for recovery
 - a terminal-first CLI with optional JSON output
 - a thin Python client built on the CLI contract
+- workflow-specific host adapters built on the Python client
 
 ## How it works
 
@@ -91,6 +92,7 @@ mnemix --store .mnemix search --text "persistent agent memory" --scope repo:mnem
 
 - The [CLI](/guide/cli) is the primary user-facing interface.
 - The [Python client](/guide/python) wraps the CLI's `--json` contract.
+- The [Host Adapters](/guide/host-adapters) page shows how to shape recall and writeback for coding, chat, CI, and review workflows.
 - The [storage foundation](/guide/lancedb) explains why Mnemix uses LanceDB and Lance underneath.
 
 ## Next steps
