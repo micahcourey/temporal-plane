@@ -110,6 +110,12 @@ On supported platforms, the PyPI wheel bundles the `mnemix` CLI binary:
 pip install mnemix
 ```
 
+If you want the CLI as a standalone tool, prefer `pipx`:
+
+```bash
+pipx install mnemix
+```
+
 If no bundled wheel is available for your platform, install the CLI from source:
 
 ```bash
@@ -166,10 +172,16 @@ mnemix --store .mnemix restore --checkpoint before-refactor
 
 ## Python client
 
-Install from PyPI:
+For library use, install from PyPI:
 
 ```bash
 pip install mnemix
+```
+
+For CLI-first use, install with `pipx`:
+
+```bash
+pipx install mnemix
 ```
 
 > On supported platforms, the wheel includes the `mnemix` CLI binary and works without any extra setup. If you are on an unsupported platform or using a source install, install the CLI separately and ensure it is on `PATH`, or set `MNEMIX_BINARY=/path/to/mnemix`.
@@ -206,6 +218,26 @@ for m in results:
 stats = client.stats()
 print(f"Total memories: {stats.total_memories}")
 ```
+
+---
+
+## Host adapters
+
+Mnemix keeps the base Python client generic and puts workflow policy in
+host-specific adapters under [`adapters/`](/Users/micah/Projects/mnemix/adapters).
+
+Available adapters:
+
+- `CodingAgentAdapter` for implementation tasks, decisions, procedures, and pitfalls
+- `ChatAssistantAdapter` for user preferences and durable chat context
+- `CiBotAdapter` for automated runs, checkpoints, failures, and fixes
+- `ReviewToolAdapter` for review rules, conventions, and recurring issues
+
+See:
+
+- [adapters/README.md](/Users/micah/Projects/mnemix/adapters/README.md)
+- [docs_site/src/guide/host-adapters.md](/Users/micah/Projects/mnemix/docs_site/src/guide/host-adapters.md)
+- [examples/agent-memory-layer/README.md](/Users/micah/Projects/mnemix/examples/agent-memory-layer/README.md)
 
 ---
 

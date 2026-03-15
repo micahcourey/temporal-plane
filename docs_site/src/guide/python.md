@@ -17,6 +17,12 @@ Install from PyPI:
 pip install mnemix
 ```
 
+If you mainly want the CLI as a standalone tool, install it with `pipx`:
+
+```bash
+pipx install mnemix
+```
+
 On supported platforms, the wheel bundles the `mnemix` CLI binary. If your platform does not have a bundled binary, install the CLI separately or point `MNEMIX_BINARY` at an existing binary.
 
 ## Quick start
@@ -87,6 +93,11 @@ The client resolves the CLI binary in this order:
 3. `mnemix` on `PATH`
 
 This makes it easy to use published wheels, local development builds, or custom binaries in tests and integrations.
+
+## pip vs pipx
+
+- Use `pip install mnemix` when you want the Python package as a library dependency.
+- Use `pipx install mnemix` when you mainly want the `mnemix` CLI available on your shell.
 
 ## Design notes
 

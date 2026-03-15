@@ -84,6 +84,28 @@ The coding adapter also exposes:
 - version inspection and restore
 - optimize, export, and staged import helpers
 
+### CodingAgentAdapter API
+
+| Method | Purpose |
+|---|---|
+| `start_task(...)` | Assemble task-start context with recall, pins, and recent history |
+| `search_memory(...)` | Run targeted search during implementation work |
+| `load_memory(...)` | Inspect one memory in full detail |
+| `list_pins(...)` | View pinned memory for the current repo or scope |
+| `review_recent_memory(...)` | Inspect recent memory activity |
+| `checkpoint_before_risky_change(...)` | Create a safety checkpoint before risky work |
+| `list_versions(...)` | Inspect store version history |
+| `restore_checkpoint(...)` | Restore to a named checkpoint |
+| `restore_version(...)` | Restore to a specific version |
+| `optimize_store(...)` | Run compaction and optional pruning |
+| `export_snapshot(...)` | Export the current store |
+| `stage_import(...)` | Stage an imported store into the current store |
+| `store_decision(...)` | Persist a durable design decision |
+| `store_procedure(...)` | Persist a reusable coding procedure |
+| `store_summary(...)` | Persist a session/task summary |
+| `store_fact(...)` | Persist a stable project fact |
+| `store_pitfall(...)` | Persist a recurring implementation warning |
+
 ## Chat assistant workflow
 
 Chat assistants should usually store much less than coding agents. The main
@@ -109,6 +131,14 @@ Use chat writeback for:
 - stable factual context that should persist across sessions
 
 Avoid storing transient turn-by-turn summaries.
+
+### ChatAssistantAdapter API
+
+| Method | Purpose |
+|---|---|
+| `prepare_reply(...)` | Recall prompt-ready user and conversation context |
+| `store_preference(...)` | Persist a durable user preference |
+| `store_fact(...)` | Persist a stable user- or task-relevant fact |
 
 ## CI bot workflow
 
@@ -137,6 +167,14 @@ Use CI writeback for:
 - runbook-quality fixes
 - operational warnings that should influence later runs
 
+### CiBotAdapter API
+
+| Method | Purpose |
+|---|---|
+| `prepare_run(...)` | Recall CI context and optionally create a pre-run checkpoint |
+| `record_failure(...)` | Persist a recurring CI failure mode |
+| `record_fix(...)` | Persist a reusable remediation procedure |
+
 ## Review tool workflow
 
 Review tools need reusable review knowledge rather than generic task history.
@@ -160,6 +198,14 @@ Use review writeback for:
 - reusable review rules
 - recurring quality issues
 - project-specific review conventions
+
+### ReviewToolAdapter API
+
+| Method | Purpose |
+|---|---|
+| `prepare_review(...)` | Recall project conventions and review context |
+| `record_review_rule(...)` | Persist a reusable review rule or policy |
+| `record_recurring_issue(...)` | Persist a recurring review finding or quality issue |
 
 ## Design rule
 

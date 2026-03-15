@@ -23,6 +23,13 @@ Install the Python wrapper from PyPI:
 pip install mnemix
 ```
 
+If you primarily want the `mnemix` CLI as an isolated command-line tool,
+prefer `pipx`:
+
+```bash
+pipx install mnemix
+```
+
 On supported platforms, this wheel includes the Rust `mnemix` CLI
 binary and should work without any additional setup.
 
@@ -124,3 +131,7 @@ exposes `__version__` correctly.
 The current binding uses the CLI `--json` surface as the execution boundary.
 Direct FFI via PyO3 is deferred until a dedicated stable Rust application API
 exists and there is a concrete need that the CLI boundary cannot satisfy.
+
+If you are using Mnemix as a Python library inside an application, use
+`pip install mnemix`. If you are installing it mainly for the `mnemix` command,
+`pipx install mnemix` is usually the better fit.

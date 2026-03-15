@@ -1,7 +1,7 @@
 """Basic Mnemix Python binding example.
 
 Run with:
-    tp binary on PATH (cargo build --release, then add target/release to PATH)
+    mnemix binary on PATH (cargo build --release, then add target/release to PATH)
     pip install -e ../../python
     python example.py
 """
