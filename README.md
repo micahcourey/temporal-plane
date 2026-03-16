@@ -49,16 +49,6 @@ Docs: [docs.mnemix.org](https://docs.mnemix.org)
 
 ---
 
-## Ecosystem
-
-Mnemix is also part of a broader tooling ecosystem. For config-driven,
-multi-platform generation of AI coding resources, see
-[mnemix-context](https://github.com/micahcourey/mnemix-context), a companion
-project for generating reusable agent instructions, prompts, skills, and other
-coding-assistant resources.
-
----
-
 ## How it works
 
 An agent calls `remember` to persist an observation, decision, or fact. Later sessions call `recall` or `search` to retrieve the most relevant context. The full version history of the store is preserved — you can checkpoint before risky operations, list what changed, and restore to any prior state.
@@ -371,7 +361,17 @@ Direct FFI via PyO3 is planned for a future milestone once the stable Rust API s
 | 5 | Version-aware safety features | ✅ Done |
 | 6 | Python binding and first adapter | ✅ Done |
 | 7 | Advanced storage workflows (branch-aware internals) | ✅ Done |
-| — | First PyPI release | 🚀 In progress |
+| 8 | First PyPI release | ✅ Done |
+
+---
+
+## Ecosystem
+
+Mnemix is also part of a broader tooling ecosystem. For config-driven,
+multi-platform generation of AI coding resources, see
+[mnemix-context](https://github.com/micahcourey/mnemix-context), a companion
+project for generating reusable agent instructions, prompts, skills, and other
+coding-assistant resources.
 
 ---
 
@@ -395,19 +395,6 @@ The workspace is configured with:
 ```bash
 ./scripts/check-python-package.sh
 ```
-
----
-
-## Documentation
-
-- [Architecture and plan](docs/mnemix-plan-v3.md)
-- [Roadmap and milestones](docs/mnemix-roadmap.md)
-- [LanceDB Rust SDK agent guide](docs/lancedb-rust-sdk-agent-guide.md)
-- [Checkpoint and retention policy](docs/checkpoint-and-retention-policy.md)
-- [Versioning and restore](docs/versioning-and-restore.md)
-- [Branch lifecycle](docs/branch-lifecycle.md)
-- [Python package README](python/README.md)
-- [Release checklist](docs/release-checklist.md)
 
 ---
 
