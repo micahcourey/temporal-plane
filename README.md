@@ -44,6 +44,9 @@ AI coding agents have no continuous memory. Every session starts cold. Mnemix ch
 
 No cloud, no daemon, no configuration sprawl. Just a local store on your filesystem that your agent can write to and read from, with a clean CLI and Python client sitting on top.
 
+Website: [mnemix.org](https://mnemix.org)  
+Docs: [docs.mnemix.org](https://docs.mnemix.org)
+
 ---
 
 ## Ecosystem
