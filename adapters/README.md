@@ -19,9 +19,12 @@ storage internals.
 `CodingAgentAdapter` is the richest adapter because coding agents are currently
 the primary host workflow. It now covers:
 
+- scope helpers for repo, workspace, session, and task namespaces
 - task-start recall modes (`quick`, `normal`, `deep`)
 - pinned-memory and recent-history context assembly
 - targeted search and memory inspection
+- typed outcome classification with an explicit skip path
+- `store_outcome(...)` for policy-driven writeback
 - decisions, procedures, summaries, facts, and pitfalls
 - pre-change checkpoints
 - version inspection and restore

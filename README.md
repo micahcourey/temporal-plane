@@ -46,6 +46,16 @@ No cloud, no daemon, no configuration sprawl. Just a local store on your filesys
 
 ---
 
+## Ecosystem
+
+Mnemix is also part of a broader tooling ecosystem. For config-driven,
+multi-platform generation of AI coding resources, see
+[mnemix-context](https://github.com/micahcourey/mnemix-context), a companion
+project for generating reusable agent instructions, prompts, skills, and other
+coding-assistant resources.
+
+---
+
 ## How it works
 
 An agent calls `remember` to persist an observation, decision, or fact. Later sessions call `recall` or `search` to retrieve the most relevant context. The full version history of the store is preserved — you can checkpoint before risky operations, list what changed, and restore to any prior state.
@@ -238,6 +248,10 @@ See:
 - [adapters/README.md](/Users/micah/Projects/mnemix/adapters/README.md)
 - [docs_site/src/guide/host-adapters.md](/Users/micah/Projects/mnemix/docs_site/src/guide/host-adapters.md)
 - [examples/agent-memory-layer/README.md](/Users/micah/Projects/mnemix/examples/agent-memory-layer/README.md)
+
+For a more comprehensive coding-agent adapter and reusable agent memory policy
+template, see the `mnemix-context` templates here:
+[mnemix-context/templates/universal/mnemix](https://github.com/micahcourey/mnemix-context/tree/main/templates/universal/mnemix)
 
 ---
 

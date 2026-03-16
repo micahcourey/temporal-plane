@@ -14,6 +14,7 @@ from adapters import (  # noqa: E402
     ChatAssistantAdapter,
     CiBotAdapter,
     CodingAgentAdapter,
+    CodingOutcome,
     ReviewToolAdapter,
 )
 from mnemix.models import (  # noqa: E402
@@ -185,6 +186,13 @@ def test_coding_agent_store_decision_uses_decision_kind(
     assert req.source_tool == "coding-agent"
 
 
+def test_coding_agent_scope_helpers_normalize_values() -> None:
+    assert CodingAgentAdapter.repo_scope("Mnemix Core") == "repo:mnemix-core"
+    assert CodingAgentAdapter.workspace_scope("Release Prep") == "workspace:release-prep"
+    assert CodingAgentAdapter.session_scope("Session 42") == "session:session-42"
+    assert CodingAgentAdapter.task_scope("Mnemix Core", "Fix Recall") == "task:mnemix-core-fix-recall"
+
+
 def test_coding_agent_supports_search_and_show(mock_client: MagicMock) -> None:
     adapter = _build(CodingAgentAdapter, mock_client)
 
@@ -218,6 +226,103 @@ def test_coding_agent_exposes_checkpoint_restore_and_maintenance(
     mock_client.versions.assert_called_once_with(limit=5)
     mock_client.export.assert_called_once_with("/tmp/exported-store")
     mock_client.import_store.assert_called_once_with("/tmp/source-store")
+
+
+def test_coding_agent_classifies_low_signal_outcome_as_skip(
+    mock_client: MagicMock,
+) -> None:
+    adapter = _build(CodingAgentAdapter, mock_client)
+
+    outcome = CodingOutcome(
+        memory_id="memory:skip-1",
+        scope="repo:mnemix",
+        title="Edited one file",
+        summary="Made a small local edit.",
+        detail="This was a trivial change with no durable learning.",
+        low_signal=True,
+    )
+
+    classification = adapter.classify_outcome(outcome)
+    stored = adapter.store_outcome(outcome)
+
+    assert classification.kind == "skip"
+    assert stored.stored is False
+    mock_client.remember.assert_not_called()
+
+
+def test_coding_agent_classifies_architecture_outcome_as_decision(
+    mock_client: MagicMock,
+) -> None:
+    adapter = _build(CodingAgentAdapter, mock_client)
+
+    outcome = CodingOutcome(
+        memory_id="memory:decision-2",
+        scope="repo:mnemix",
+        title="Keep policy in adapters",
+        summary="Workflow policy belongs in host adapters.",
+        detail="The base client should remain generic while adapters hold host-specific judgment.",
+        architecture_relevant=True,
+        should_pin=True,
+    )
+
+    classification = adapter.classify_outcome(outcome)
+
+    assert classification.kind == "decision"
+    assert classification.pin_reason == "Pinned coding-agent decision"
+    assert "decision" in classification.tags
+
+
+def test_coding_agent_store_outcome_uses_inferred_kind_and_metadata(
+    mock_client: MagicMock,
+) -> None:
+    adapter = _build(CodingAgentAdapter, mock_client)
+
+    result = adapter.store_outcome(
+        CodingOutcome(
+            memory_id="memory:procedure-2",
+            scope="repo:mnemix",
+            title="Checkpoint before risky migrations",
+            summary="Create a checkpoint before large state-changing work.",
+            detail="This keeps restore straightforward if the migration writes low-signal memories.",
+            reusable=True,
+            tags=["migration"],
+            entities=["Mnemix"],
+            source_session_id="session:abc",
+            source_ref="docs/mnemix-roadmap.md",
+            metadata={"files_touched": "adapters/coding_agent_adapter.py"},
+        )
+    )
+
+    req = mock_client.remember.call_args[0][0]
+    assert result.stored is True
+    assert result.classification.kind == "procedure"
+    assert req.kind == "procedure"
+    assert req.tags == ["coding", "procedure", "migration"]
+    assert req.entities == ["Mnemix"]
+    assert req.source_session_id == "session:abc"
+    assert req.source_ref == "docs/mnemix-roadmap.md"
+    assert req.metadata["files_touched"] == "adapters/coding_agent_adapter.py"
+
+
+def test_coding_agent_explicit_skip_hint_short_circuits_writeback(
+    mock_client: MagicMock,
+) -> None:
+    adapter = _build(CodingAgentAdapter, mock_client)
+
+    result = adapter.store_outcome(
+        CodingOutcome(
+            memory_id="memory:skip-2",
+            scope="repo:mnemix",
+            title="Do not store this",
+            summary="Explicit skip outcome.",
+            detail="Caller already decided this is not durable.",
+            kind_hint="skip",
+        )
+    )
+
+    assert result.stored is False
+    assert result.classification.reason == "Outcome explicitly marked to skip writeback."
+    mock_client.remember.assert_not_called()
 
 
 def test_chat_assistant_store_preference_pins_preference(

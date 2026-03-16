@@ -95,6 +95,12 @@ mnemix --store .mnemix search --text "persistent agent memory" --scope repo:mnem
 - The [Host Adapters](/guide/host-adapters) page shows how to shape recall and writeback for coding, chat, CI, and review workflows.
 - The [storage foundation](/guide/lancedb) explains why Mnemix uses LanceDB and Lance underneath.
 
+## Ecosystem
+
+Mnemix is also part of a broader toolchain. For config-driven, multi-platform
+generation of AI coding resources, see
+[mnemix-context](https://github.com/micahcourey/mnemix-context).
+
 ## Next steps
 
 - Read [Memory Model](/guide/memory-model) for the shape of stored records.

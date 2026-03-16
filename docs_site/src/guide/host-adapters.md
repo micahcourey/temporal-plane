@@ -62,7 +62,7 @@ adapter = CodingAgentAdapter(store=Path(".mnemix"))
 adapter.ensure_store()
 
 context = adapter.start_task(
-    scope="repo:mnemix",
+    scope=adapter.repo_scope("mnemix"),
     task_title="Add host-specific adapter docs",
     mode="deep",
 )
@@ -77,8 +77,11 @@ Use coding-agent writeback for:
 
 The coding adapter also exposes:
 
+- scope helpers with `repo_scope(...)`, `workspace_scope(...)`, `session_scope(...)`, and `task_scope(...)`
 - targeted search with `search_memory(...)`
 - full memory inspection with `load_memory(...)`
+- typed classification with `classify_outcome(...)`
+- policy-driven writeback with `store_outcome(...)`
 - explicit pin and history review through task-start context assembly
 - pre-change checkpoints with `checkpoint_before_risky_change(...)`
 - version inspection and restore
@@ -88,11 +91,17 @@ The coding adapter also exposes:
 
 | Method | Purpose |
 |---|---|
+| `repo_scope(...)` | Build a standard repository scope |
+| `workspace_scope(...)` | Build a standard workspace scope |
+| `session_scope(...)` | Build a standard session scope |
+| `task_scope(...)` | Build a standard task scope |
 | `start_task(...)` | Assemble task-start context with recall, pins, and recent history |
 | `search_memory(...)` | Run targeted search during implementation work |
 | `load_memory(...)` | Inspect one memory in full detail |
 | `list_pins(...)` | View pinned memory for the current repo or scope |
 | `review_recent_memory(...)` | Inspect recent memory activity |
+| `classify_outcome(...)` | Classify a coding outcome as skip/decision/procedure/summary/fact/warning |
+| `store_outcome(...)` | Apply classification and write back only durable outcomes |
 | `checkpoint_before_risky_change(...)` | Create a safety checkpoint before risky work |
 | `list_versions(...)` | Inspect store version history |
 | `restore_checkpoint(...)` | Restore to a named checkpoint |
@@ -214,3 +223,10 @@ the adapter for the specific host.
 
 That gives each host the right memory behavior without turning the product API
 into a grab bag of use-case-specific flags.
+
+## Ecosystem template
+
+If you want a more comprehensive coding-agent adapter and reusable memory-policy
+template, see the `mnemix-context` universal Mnemix template:
+
+[mnemix-context/templates/universal/mnemix](https://github.com/micahcourey/mnemix-context/tree/main/templates/universal/mnemix)

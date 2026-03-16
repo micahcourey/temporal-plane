@@ -105,9 +105,14 @@ class BaseAdapter:
         summary: str,
         detail: str,
         importance: int,
+        confidence: int = 100,
         tags: list[str] | None = None,
+        entities: list[str] | None = None,
         pin_reason: str | None = None,
         source_tool: str | None = None,
+        source_session_id: str | None = None,
+        source_ref: str | None = None,
+        metadata: dict[str, str] | None = None,
     ) -> MemoryDetail:
         from mnemix.models import RememberRequest
 
@@ -120,8 +125,13 @@ class BaseAdapter:
                 summary=summary,
                 detail=detail,
                 importance=importance,
+                confidence=confidence,
                 tags=tags or [],
+                entities=entities or [],
                 pin_reason=pin_reason,
                 source_tool=source_tool,
+                source_session_id=source_session_id,
+                source_ref=source_ref,
+                metadata=metadata or {},
             )
         )

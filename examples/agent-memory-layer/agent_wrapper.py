@@ -15,13 +15,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from mnemix import Mnemix
-from mnemix.models import RecallRequest, RememberRequest
+from adapters import CodingAgentAdapter, CodingOutcome
 
 
 @dataclass(frozen=True)
 class AgentTask:
-    scope: str
+    repo_name: str
     title: str
     prompt: str
     trivial: bool = False
@@ -39,8 +38,8 @@ class AgentMemoryLayer:
     """Wraps an agent runtime with selective Mnemix recall and writeback."""
 
     def __init__(self, store: Path | str = Path(".mnemix")) -> None:
-        self._client = Mnemix(store=store)
-        self._client.init()
+        self._adapter = CodingAgentAdapter(store=store)
+        self._adapter.ensure_store()
 
     def run_task(self, task: AgentTask) -> AgentResult:
         context_block = ""
@@ -56,19 +55,11 @@ class AgentMemoryLayer:
         return result
 
     def _build_context_block(self, task: AgentTask) -> str:
-        recalled = self._client.recall(
-            RecallRequest(
-                scope=task.scope,
-                text=task.title,
-                disclosure_depth="summary_then_pinned",
-                limit=8,
-            )
+        context = self._adapter.start_task(
+            scope=self._adapter.repo_scope(task.repo_name),
+            task_title=task.title,
         )
-
-        lines: list[str] = []
-        for entry in [*recalled.pinned_context, *recalled.summaries]:
-            lines.append(f"- [{entry.layer}] {entry.memory.title}: {entry.memory.summary}")
-        return "\n".join(lines)
+        return context.prompt_preamble
 
     def _compose_prompt(self, prompt: str, context_block: str) -> str:
         if not context_block:
@@ -111,15 +102,14 @@ class AgentMemoryLayer:
             .replace(":", "-")
         )
 
-        self._client.remember(
-            RememberRequest(
-                id=f"memory:{memory_id}",
-                scope=task.scope,
-                kind="procedure",
+        self._adapter.store_outcome(
+            CodingOutcome(
+                memory_id=f"memory:{memory_id}",
+                scope=self._adapter.repo_scope(task.repo_name),
                 title=task.title,
                 summary=result.durable_summary,
                 detail=result.durable_detail,
-                importance=80,
+                reusable=True,
                 tags=["agents", "memory"],
                 source_tool="agent-wrapper",
             )
@@ -130,7 +120,7 @@ if __name__ == "__main__":
     layer = AgentMemoryLayer()
     result = layer.run_task(
         AgentTask(
-            scope="repo:mnemix",
+            repo_name="mnemix",
             title="Use Mnemix selectively in agent workflows",
             prompt="Draft project guidance for intelligent memory usage.",
         )
