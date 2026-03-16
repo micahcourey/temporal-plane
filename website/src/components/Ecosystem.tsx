@@ -4,7 +4,7 @@ export default function Ecosystem() {
     return (
         <section id="ecosystem" style={styles.section}>
             <div className="container" style={styles.container}>
-                <div className="glass-card" style={styles.card}>
+                <div className="glass-card ecosystem-card">
                     <div style={styles.copy}>
                         <div style={styles.eyebrow}>
                             <Sparkles size={16} />
@@ -16,32 +16,30 @@ export default function Ecosystem() {
                         <p style={styles.body}>
                             For config-driven, multi-platform generation of AI coding resources,
                             use <a href="https://github.com/micahcourey/mnemix-context" target="_blank" rel="noreferrer" style={styles.link}>mnemix-context</a>.
-                            It complements Mnemix by generating reusable instructions, prompts,
-                            skills, and coding-agent resources around your local memory workflow.
+                            It generates pre-configured AI agents, auto-activating skills, and platform adapters tailored to your entire repository.
                         </p>
                         <p style={styles.body}>
-                            The universal Mnemix template includes a more comprehensive coding-agent
-                            adapter and agent memory policy:
+                            Mnemix Context dynamically integrates with GitHub Copilot, Cursor, Claude Code, Cline, and Windsurf, acting as the bridge between your local memory engine and your favorite AI assistant.
                         </p>
                         <a
-                            href="https://github.com/micahcourey/mnemix-context/tree/main/templates/universal/mnemix"
+                            href="https://github.com/micahcourey/mnemix-context"
                             target="_blank"
                             rel="noreferrer"
                             className="btn btn-secondary"
                             style={styles.button}
                         >
                             <Blocks size={18} />
-                            Explore the template
+                            Explore mnemix-context
                             <ExternalLink size={16} />
                         </a>
                     </div>
 
-                    <div style={styles.metaPanel}>
+                    <div className="ecosystem-meta">
                         <div style={styles.metaBadge}>Companion project</div>
                         <ul style={styles.list}>
-                            <li style={styles.listItem}>Config-driven agent resource generation</li>
-                            <li style={styles.listItem}>Portable prompts, skills, and instructions</li>
-                            <li style={styles.listItem}>Reusable coding-agent memory policy templates</li>
+                            <li style={styles.listItem}>Auto-generates context files by parsing your codebase schema and architecture</li>
+                            <li style={styles.listItem}>Pre-configured Architect, Engineer, Reviewer, and Documentation agent personas</li>
+                            <li style={styles.listItem}>Universal compatibility with native adapters for 7 leading AI tools</li>
                         </ul>
                     </div>
                 </div>
@@ -57,13 +55,6 @@ const styles = {
     container: {
         display: 'flex',
         flexDirection: 'column' as const,
-    },
-    card: {
-        display: 'grid',
-        gridTemplateColumns: '1.4fr 0.9fr',
-        gap: '2rem',
-        alignItems: 'stretch',
-        background: 'linear-gradient(135deg, rgba(20,184,166,0.08) 0%, rgba(255,255,255,0.03) 100%)',
     },
     copy: {
         display: 'flex',
@@ -96,14 +87,6 @@ const styles = {
     button: {
         marginTop: '0.5rem',
         width: 'fit-content',
-    },
-    metaPanel: {
-        borderLeft: '1px solid rgba(255,255,255,0.08)',
-        paddingLeft: '2rem',
-        display: 'flex',
-        flexDirection: 'column' as const,
-        justifyContent: 'center',
-        gap: '1rem',
     },
     metaBadge: {
         color: 'var(--color-primary)',

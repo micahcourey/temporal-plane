@@ -177,6 +177,38 @@ a:hover {
   }
 }
 
+/* Ecosystem Card */
+.ecosystem-card {
+  display: grid;
+  grid-template-columns: 1.4fr 0.9fr;
+  gap: 2rem;
+  align-items: stretch;
+  background: linear-gradient(135deg, rgba(20, 184, 166, 0.08) 0%, rgba(255, 255, 255, 0.03) 100%);
+}
+
+.ecosystem-meta {
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  padding-left: 2rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1rem;
+}
+
+@media (max-width: 900px) {
+  .ecosystem-card {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+
+  .ecosystem-meta {
+    border-left: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    padding-left: 0;
+    padding-top: 1.5rem;
+  }
+}
+
 /* Animations */
 @keyframes fadeIn {
   from {
