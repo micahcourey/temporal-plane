@@ -1,6 +1,47 @@
-import { Code2, Braces, Sparkles, Terminal } from 'lucide-react';
+import { useState } from 'react';
+import { Code2, Braces, Sparkles, Terminal, Copy } from 'lucide-react';
+
+const examples = [
+    {
+        id: 'python',
+        label: 'Python Adapter',
+        language: 'python',
+        filename: 'agent.py',
+        code: `
+<span style="color: #ff7b72">from</span> mnemix.adapters <span style="color: #ff7b72">import</span> ChatAdapter
+
+<span style="color: #8b949e"># Wrap any agent with memory-persistence</span>
+agent = ChatAdapter(
+    model=<span style="color: #a5d6ff">"gpt-o3-mini"</span>,
+    workspace=<span style="color: #a5d6ff">"project-mnemix"</span>
+)
+
+<span style="color: #8b949e"># Memories are automatically managed</span>
+response = agent.chat(<span style="color: #a5d6ff">"How did we fix the CORS bug?"</span>)
+<span style="color: #d2a8ff">print</span>(response)
+`.trim()
+    },
+    {
+        id: 'cli',
+        label: 'CLI Tool',
+        language: 'bash',
+        filename: 'terminal',
+        code: `
+<span style="color: #8b949e"># Query memories from the terminal</span>
+mnemix query <span style="color: #a5d6ff">"CORS bug"</span> --kind decision
+
+<span style="color: #8b949e"># Time-travel to a specific checkpoint</span>
+mnemix restore --version v_prev_992
+
+<span style="color: #8b949e"># Export store for manual audit</span>
+mnemix export --format json
+`.trim()
+    }
+];
 
 export default function HowItWorks() {
+    const [activeTab, setActiveTab] = useState(0);
+
     return (
         <section id="how-it-works" style={styles.section}>
             <div className="container" style={styles.container}>
@@ -37,41 +78,41 @@ export default function HowItWorks() {
 
                 <div style={styles.codeCol}>
                     <div className="glass-card" style={styles.codeCard}>
-                        <div style={styles.windowHeader}>
-                            <div style={styles.windowTab}><Terminal size={14} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '6px' }} />pip install mnemix</div>
+                        <div style={styles.windowHeaderStrip}>
+                            <div style={styles.tabContainer}>
+                                {examples.map((ex, i) => (
+                                    <button
+                                        key={ex.id}
+                                        onClick={() => setActiveTab(i)}
+                                        style={{
+                                            ...styles.codeTab,
+                                            color: i === activeTab ? 'var(--color-text-base)' : 'var(--color-text-subtle)',
+                                            borderBottom: i === activeTab ? '2px solid var(--color-primary)' : '2px solid transparent',
+                                            background: i === activeTab ? 'rgba(255,255,255,0.03)' : 'transparent',
+                                        }}
+                                    >
+                                        {ex.label}
+                                    </button>
+                                ))}
+                            </div>
+                            <div style={styles.copyBtn}>
+                                <Copy size={16} />
+                            </div>
                         </div>
-                        <div style={styles.windowHeader2}>
-                            <div style={styles.windowTab}>agent.py</div>
+
+                        <div style={styles.codeArea}>
+                            <pre
+                                className="mono"
+                                style={styles.code}
+                                dangerouslySetInnerHTML={{
+                                    __html: examples[activeTab].code
+                                }}
+                            />
                         </div>
-                        <pre
-                            className="mono"
-                            style={styles.code}
-                            dangerouslySetInnerHTML={{
-                                __html: `
-<span style="color: #ff7b72">from</span> mnemix <span style="color: #ff7b72">import</span> Mnemix, RememberRequest
-
-<span style="color: #8b949e"># 1. Initialize the local store</span>
-client = Mnemix(store=<span style="color: #a5d6ff">".mnemix"</span>)
-client.init()
-
-<span style="color: #8b949e"># 2. Persist a decision</span>
-client.remember(RememberRequest(
-  id=<span style="color: #a5d6ff">"mem-001"</span>,
-  scope=<span style="color: #a5d6ff">"my-project"</span>,
-  kind=<span style="color: #a5d6ff">"decision"</span>,
-  title=<span style="color: #a5d6ff">"Use LanceDB for storage"</span>,
-  summary=<span style="color: #a5d6ff">"Chosen for embedded Arrow."</span>,
-  importance=<span style="color: #79c0ff">80</span>,
-  tags=[<span style="color: #a5d6ff">"architecture"</span>]
-))
-
-<span style="color: #8b949e"># 3. Retrieve context for next session</span>
-context = client.recall()
-<span style="color: #ff7b72">for</span> entry <span style="color: #ff7b72">in</span> context.pinned_context:
-  <span style="color: #d2a8ff">print</span>(<span style="color: #a5d6ff">f"[pinned] {entry.memory.title}"</span>)
-`.trim()
-                            }}
-                        />
+                    </div>
+                    <div style={styles.installBar}>
+                        <Terminal size={14} style={{ marginRight: '8px' }} />
+                        <span>pip install mnemix</span>
                     </div>
                 </div>
             </div>
@@ -146,38 +187,69 @@ const styles = {
     },
     codeCol: {
         width: '100%',
+        display: 'flex',
+        flexDirection: 'column' as const,
+        gap: '1.5rem',
     },
     codeCard: {
         padding: 0,
         background: '#0d1117',
         borderColor: 'rgba(255,255,255,0.05)',
+        borderRadius: '12px',
+        overflow: 'hidden',
     },
-    windowHeader: {
-        padding: '0.75rem 1rem',
-        borderBottom: '1px solid rgba(255,255,255,0.05)',
+    windowHeaderStrip: {
         display: 'flex',
-        backgroundColor: 'rgba(20, 184, 166, 0.05)',
         alignItems: 'center',
-    },
-    windowHeader2: {
-        padding: '0.5rem 1rem',
+        justifyContent: 'space-between',
+        padding: '0 1rem',
+        background: 'rgba(255,255,255,0.02)',
         borderBottom: '1px solid rgba(255,255,255,0.05)',
-        display: 'flex',
     },
-    windowTab: {
+    tabContainer: {
+        display: 'flex',
+        gap: '1rem',
+    },
+    codeTab: {
+        padding: '1rem 1.25rem',
         fontSize: '0.85rem',
-        color: 'var(--color-text-muted)',
+        fontWeight: 500,
+        cursor: 'pointer',
+        transition: 'all 0.2s ease',
+        border: 'none',
+        outline: 'none',
+    },
+    copyBtn: {
+        color: 'var(--color-text-subtle)',
+        cursor: 'pointer',
+        opacity: 0.6,
+        '&:hover': {
+            opacity: 1
+        }
+    },
+    codeArea: {
+        padding: '1.5rem',
+        minHeight: '260px',
     },
     code: {
-        padding: '1.5rem',
         overflowX: 'auto' as const,
-        fontSize: '0.9rem',
+        fontSize: '0.95rem',
         margin: 0,
-        lineHeight: 1.5,
+        lineHeight: 1.6,
+        fontFamily: 'var(--font-mono)',
+        textAlign: 'left' as const,
     },
-    keyword: { color: '#ff7b72' },
-    string: { color: '#a5d6ff' },
-    comment: { color: '#8b949e' },
-    number: { color: '#79c0ff' },
-    fn: { color: '#d2a8ff' },
+    installBar: {
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '0.75rem 1.5rem',
+        background: 'rgba(20, 184, 166, 0.05)',
+        border: '1px solid rgba(20, 184, 166, 0.2)',
+        borderRadius: '8px',
+        color: 'var(--color-primary)',
+        fontSize: '0.9rem',
+        fontFamily: 'var(--font-mono)',
+        alignSelf: 'center',
+    },
 };

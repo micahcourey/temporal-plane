@@ -12,9 +12,9 @@ const features = [
         description: 'Pin critical decisions or preferences to always surface first. Progressive disclosure keeps the context window clean.',
     },
     {
-        icon: <History size={24} />,
-        title: 'Version History',
-        description: 'Every write creates an immutable version. Inspect and browse the full timeline of your agent\'s thought process.',
+        icon: <Database size={24} />,
+        title: 'Typed Memory',
+        description: 'Distinct types like observation, decision, preference, fact, and warning help the agent reason about retrieved data.',
     },
     {
         icon: <MoveLeft size={24} />,
@@ -22,9 +22,9 @@ const features = [
         description: 'Restore the store to any prior version or checkpoint as a new head state. Easily undo agent mistakes.',
     },
     {
-        icon: <Database size={24} />,
-        title: 'Typed Memory',
-        description: 'Distinct types like observation, decision, preference, fact, and warning help the agent reason about retrieved data.',
+        icon: <History size={24} />,
+        title: 'Version History',
+        description: 'Every write creates an immutable version. Inspect and browse the full timeline of your agent\'s thought process.',
     },
     {
         icon: <Shield size={24} />,

@@ -14,6 +14,7 @@ export default function Header() {
 
         <nav className="desktop-nav" style={styles.nav}>
           <a href="#features" style={styles.link}>Features</a>
+          <a href="#deep-dive" style={styles.link}>Architecture</a>
           <a href="#how-it-works" style={styles.link}>How it Works</a>
           <a href="https://github.com/micahcourey/mnemix" target="_blank" rel="noreferrer" style={styles.iconLink}>
             <Github size={20} />
@@ -36,6 +37,7 @@ export default function Header() {
       {isMobileMenuOpen && (
         <div className="mobile-nav-panel">
           <a href="#features" style={styles.link} onClick={() => setIsMobileMenuOpen(false)}>Features</a>
+          <a href="#deep-dive" style={styles.link} onClick={() => setIsMobileMenuOpen(false)}>Architecture</a>
           <a href="#how-it-works" style={styles.link} onClick={() => setIsMobileMenuOpen(false)}>How it Works</a>
           <a href="https://github.com/micahcourey/mnemix" target="_blank" rel="noreferrer" style={styles.iconLink}>
             <Github size={20} />

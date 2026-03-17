@@ -3,70 +3,50 @@ import { Terminal, Copy, Database, ArrowRight, Layers, Lock } from 'lucide-react
 
 const features = [
     {
-        id: "storage",
-        tab: "Storage",
-        title: "Local-First Persistence",
-        description: "Mnemix leverages LanceDB and Apache Arrow for a lean, embedded memory store that runs entirely on your local filesystem. No cloud clusters, no managed latency—just raw speed.",
+        id: "local",
+        tab: "Local Store",
+        title: "Autonomous Persistence",
+        description: "Mnemix leverages LanceDB for a lean, embedded memory store that runs entirely on your local filesystem. High-performance columnar storage with zero infra overhead.",
         type: "diagram",
         diagram: "storage"
     },
     {
-        id: "search",
-        tab: "Search",
-        title: "Semantic Global Search",
-        description: "Combine vector search with traditional SQL-like metadata filtering. Surface exactly what your agent needs from gigabytes of historical context in milliseconds.",
-        type: "code",
-        code: `# Hybrid Search: Vector + Metadata filters
-results = client.search(
-    "How did we resolve the CORS issue?",
-    kind="decision",
-    limit=3
-)
-
-# Output format
-[
-  {"text": "Refactored origin headers...", "score": 0.98},
-  {"text": "Added CORS middleware...", "score": 0.85}
-]`
-    },
-    {
-        id: "versioning",
-        tab: "Versioning",
-        title: "Immutable History",
-        description: "Every write is a discrete, immutable version. Mnemix allows you to browse the full timeline of an agent's reasoning and restore the state to any prior checkpoint.",
-        type: "code",
-        code: `# Inspect the thought timeline
-history = client.history()
-print(f"Current version: {history[0].version_id}")
-
-# Time-travel to a previous state
-client.restore(version_id="v_prev_992")
-print("Memory state restored to checkpoint.")`
-    },
-    {
-        id: "context",
-        tab: "Context",
-        title: "Progressive Context Layers",
-        description: "Avoid flooding the LLM context window. Mnemix layers retrieval into Pinned, Summary, and Archival tiers to maintain high reasoning quality with lower token costs.",
+        id: "recall",
+        tab: "Layered Recall",
+        title: "Progressive Disclosure",
+        description: "Prevents context window flooding by returning memories in three intelligent layers: pinned_context (always loads first), summaries (distilled history), and archival (full record on demand).",
         type: "diagram",
         diagram: "layers"
     },
     {
-        id: "types",
-        tab: "Typed Memory",
-        title: "Typed Knowledge Graph",
-        description: "Memories aren't just strings. Categorize knowledge as Observations, Decisions, Facts, or Warnings to help your agent differentiate between noise and signal.",
+        id: "adapters",
+        tab: "Host Adapters",
+        title: "Workflow-Specific Policy",
+        description: "Generic memory operations wrapped in host-specific adapters. Tailor the memory lifecycle for coding agents, chat assistants, or CI bots with one-line integration.",
         type: "code",
-        code: `# Store a structured decision
-client.remember(
-    title="Primary DB Choice",
-    summary="Using LanceDB for local-first speed",
-    kind="decision",
-    importance=90
-)
+        code: `# Use the Coding Agent Adapter
+from adapters import CodingAgentAdapter
 
-# Recall only procedures
-tasks = client.recall(kind="procedure")`
+adapter = CodingAgentAdapter(store=".mnemix")
+context = adapter.start_task(
+    scope="repo:mnemix",
+    task_title="Fix build error"
+)
+# Prompt preamble is now ready`
+    },
+    {
+        id: "audit",
+        tab: "Timeline Audit",
+        title: "Immutable History & Restore",
+        description: "Every write is a discrete, immutable version. Mnemix allows you to browse the full timeline of an agent's reasoning and safely restore state to any prior checkpoint.",
+        type: "code",
+        code: `# Browse the thought timeline
+history = client.history()
+print(f"Current version: {history[0].version_id}")
+
+# Time-travel to a previous state
+client.restore(version_id="checkpoint_v2")
+print("Memory state restored to checkpoint.")`
     }
 ];
 
@@ -83,7 +63,7 @@ export default function DetailedFeatures() {
         <section id="deep-dive" style={styles.section}>
             <div className="container">
                 <div style={styles.header}>
-                    <h2 style={styles.sectionTitle}>Engineered for <span className="text-gradient">Production Agents</span></h2>
+                    <h2 style={styles.sectionTitle}>The Memory Engine <span className="text-gradient">Architecture</span></h2>
                 </div>
 
                 <div className="tab-navigation" style={styles.tabsRow}>
@@ -135,25 +115,38 @@ export default function DetailedFeatures() {
                             <div className="glass-card" style={styles.diagramWindow}>
                                 {activeFeature.diagram === 'storage' && (
                                     <div style={styles.storageDiagram}>
+                                        {/* Node 1 */}
                                         <div style={styles.diagramNode}>
-                                            <Terminal size={24} className="text-primary" />
+                                            <div style={styles.iconWrapper}>
+                                                <Terminal size={28} className="text-primary" />
+                                            </div>
                                             <span style={styles.nodeLabel}>Your Agent</span>
                                         </div>
-                                        <ArrowRight size={24} className="text-muted" />
+
+                                        {/* Connector 1 */}
+                                        <div style={styles.connector}>
+                                            <ArrowRight size={24} className="text-muted" />
+                                        </div>
+
+                                        {/* Node 2 */}
                                         <div style={styles.diagramNode}>
-                                            <div style={styles.pulseDisk} className="pulse-glow">
-                                                <Database size={32} />
+                                            <div style={{ ...styles.iconWrapper, ...styles.pulseDisk }} className="pulse-glow">
+                                                <Database size={28} />
                                             </div>
                                             <span style={styles.nodeLabel}>LanceDB (local)</span>
                                         </div>
-                                        <ArrowRight size={24} className="text-muted" />
+
+                                        {/* Connector 2 */}
+                                        <div style={styles.connector}>
+                                            <ArrowRight size={24} className="text-muted" />
+                                        </div>
+
+                                        {/* Node 3 */}
                                         <div style={styles.diagramNode}>
-                                            <div style={styles.arrowTable}>
-                                                <div style={styles.tableRow}></div>
-                                                <div style={styles.tableRow}></div>
-                                                <div style={styles.tableRow}></div>
+                                            <div style={styles.iconWrapper}>
+                                                <Layers size={28} className="text-secondary" />
                                             </div>
-                                            <span style={styles.nodeLabel}>Apache Arrow</span>
+                                            <span style={styles.nodeLabel}>Memory Records</span>
                                         </div>
                                     </div>
                                 )}
@@ -316,29 +309,46 @@ const styles = {
     },
     storageDiagram: {
         display: 'flex',
-        alignItems: 'center',
-        gap: '2rem',
+        alignItems: 'flex-start',
+        gap: '0',
+        justifyContent: 'center',
     },
     diagramNode: {
         display: 'flex',
         flexDirection: 'column' as const,
         alignItems: 'center',
-        gap: '0.75rem',
+        gap: '1rem',
+        width: '120px',
+    },
+    connector: {
+        height: '64px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: '40px',
     },
     nodeLabel: {
         fontSize: '0.8rem',
         color: 'var(--color-text-muted)',
         fontFamily: 'var(--font-cyber)',
         letterSpacing: '0.1em',
+        textAlign: 'center' as const,
+        width: '100%',
     },
-    pulseDisk: {
+    iconWrapper: {
         width: '64px',
         height: '64px',
-        borderRadius: '50%',
-        border: '2px solid var(--color-primary)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
+        borderRadius: '12px',
+        background: 'rgba(255, 255, 255, 0.03)',
+        border: '1px solid var(--color-border)',
+        boxSizing: 'border-box' as const,
+    },
+    pulseDisk: {
+        borderRadius: '50%',
+        border: '2px solid var(--color-primary)',
         color: 'var(--color-primary)',
     },
     arrowTable: {

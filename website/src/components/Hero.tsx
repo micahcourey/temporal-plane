@@ -8,8 +8,7 @@ export default function Hero() {
                 {/* Left Column: Copy & Actions */}
                 <div className="animate-fade-in" style={styles.content}>
                     <h1 style={styles.headline}>
-                        The Local Memory Engine <br />
-                        for <span className="text-gradient">AI Agents</span>
+                        The Local Memory Engine for <span className="text-gradient">AI Agents</span>
                     </h1>
 
                     <p style={styles.subtext}>
@@ -45,10 +44,11 @@ const styles = {
     glow: {
         position: 'absolute' as const,
         top: '-10%',
-        right: '-10%',
+        right: '-5%',
         width: '800px',
         height: '600px',
-        background: 'radial-gradient(ellipse at center, rgba(20, 184, 166, 0.15) 0%, rgba(10, 10, 10, 0) 70%)',
+        background: 'radial-gradient(ellipse at center, rgba(20, 184, 166, 0.15) 0%, rgba(10, 10, 10, 0) 75%)',
+        filter: 'blur(100px)',
         zIndex: -1,
         pointerEvents: 'none' as const,
     },
