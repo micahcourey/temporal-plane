@@ -1,4 +1,4 @@
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, Github } from 'lucide-react';
 
 export default function Hero() {
     return (
@@ -20,7 +20,7 @@ export default function Hero() {
                             Get Started <ArrowRight size={18} />
                         </a>
                         <a href="https://github.com/micahcourey/mnemix" target="_blank" rel="noreferrer" className="btn btn-secondary">
-                            GitHub <ArrowRight size={18} />
+                            GitHub <Github size={18} />
                         </a>
                     </div>
                 </div>
