@@ -1,4 +1,4 @@
-import { ArrowRight, Terminal } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 
 export default function Hero() {
     return (
@@ -17,18 +17,18 @@ export default function Hero() {
                     </p>
 
                     <div style={styles.actions}>
-                        <a href="#quickstart" className="btn btn-primary">
+                        <a href="https://docs.mnemix.org" target="_blank" rel="noreferrer" className="btn btn-primary">
                             Get Started <ArrowRight size={18} />
                         </a>
                         <a href="https://github.com/micahcourey/mnemix" target="_blank" rel="noreferrer" className="btn btn-secondary">
-                            <Terminal size={18} /> pip install mnemix
+                            GitHub <ArrowRight size={18} />
                         </a>
                     </div>
                 </div>
 
                 {/* Right Column: Visual Logo */}
-                <div className="animate-fade-in delay-200 hero-logo-container" style={styles.visualContainer}>
-                    <img src="/logo.png" alt="Mnemix Logo" style={styles.heroLogo} />
+                <div className="animate-fade-in delay-200 float hero-logo-container" style={styles.visualContainer}>
+                    <img src="/logo.png" alt="Mnemix Logo" className="pulse-glow" style={styles.heroLogo} />
                 </div>
             </div>
         </section>

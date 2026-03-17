@@ -1,4 +1,4 @@
-import { Code2, Braces, Sparkles } from 'lucide-react';
+import { Code2, Braces, Sparkles, Terminal } from 'lucide-react';
 
 export default function HowItWorks() {
     return (
@@ -38,31 +38,40 @@ export default function HowItWorks() {
                 <div style={styles.codeCol}>
                     <div className="glass-card" style={styles.codeCard}>
                         <div style={styles.windowHeader}>
+                            <div style={styles.windowTab}><Terminal size={14} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '6px' }} />pip install mnemix</div>
+                        </div>
+                        <div style={styles.windowHeader2}>
                             <div style={styles.windowTab}>agent.py</div>
                         </div>
-                        <pre className="mono" style={styles.code}>
-                            <span style={styles.keyword}>from</span> mnemix <span style={styles.keyword}>import</span> Mnemix, RememberRequest
+                        <pre
+                            className="mono"
+                            style={styles.code}
+                            dangerouslySetInnerHTML={{
+                                __html: `
+<span style="color: #ff7b72">from</span> mnemix <span style="color: #ff7b72">import</span> Mnemix, RememberRequest
 
-                            <span style={styles.comment}># 1. Initialize the local store</span>
-                            client = Mnemix(store=<span style={styles.string}>".mnemix"</span>)
-                            client.init()
+<span style="color: #8b949e"># 1. Initialize the local store</span>
+client = Mnemix(store=<span style="color: #a5d6ff">".mnemix"</span>)
+client.init()
 
-                            <span style={styles.comment}># 2. Persist a decision</span>
-                            client.remember(RememberRequest(
-                            id=<span style={styles.string}>"mem-001"</span>,
-                            scope=<span style={styles.string}>"my-project"</span>,
-                            kind=<span style={styles.string}>"decision"</span>,
-                            title=<span style={styles.string}>"Use LanceDB for storage"</span>,
-                            summary=<span style={styles.string}>"Chosen for embedded Arrow."</span>,
-                            importance=<span style={styles.number}>80</span>,
-                            tags=[<span style={styles.string}>"architecture"</span>]
-                            ))
+<span style="color: #8b949e"># 2. Persist a decision</span>
+client.remember(RememberRequest(
+  id=<span style="color: #a5d6ff">"mem-001"</span>,
+  scope=<span style="color: #a5d6ff">"my-project"</span>,
+  kind=<span style="color: #a5d6ff">"decision"</span>,
+  title=<span style="color: #a5d6ff">"Use LanceDB for storage"</span>,
+  summary=<span style="color: #a5d6ff">"Chosen for embedded Arrow."</span>,
+  importance=<span style="color: #79c0ff">80</span>,
+  tags=[<span style="color: #a5d6ff">"architecture"</span>]
+))
 
-                            <span style={styles.comment}># 3. Retrieve context for next session</span>
-                            context = client.recall()
-                            <span style={styles.keyword}>for</span> entry <span style={styles.keyword}>in</span> context.pinned_context:
-                            <span style={styles.fn}>print</span>(<span style={styles.string}>f"[pinned]</span> <span style={styles.keyword}>&#123;</span>entry.memory.title<span style={styles.keyword}>&#125;</span><span style={styles.string}>"</span>)
-                        </pre>
+<span style="color: #8b949e"># 3. Retrieve context for next session</span>
+context = client.recall()
+<span style="color: #ff7b72">for</span> entry <span style="color: #ff7b72">in</span> context.pinned_context:
+  <span style="color: #d2a8ff">print</span>(<span style="color: #a5d6ff">f"[pinned] {entry.memory.title}"</span>)
+`.trim()
+                            }}
+                        />
                     </div>
                 </div>
             </div>
@@ -145,6 +154,13 @@ const styles = {
     },
     windowHeader: {
         padding: '0.75rem 1rem',
+        borderBottom: '1px solid rgba(255,255,255,0.05)',
+        display: 'flex',
+        backgroundColor: 'rgba(20, 184, 166, 0.05)',
+        alignItems: 'center',
+    },
+    windowHeader2: {
+        padding: '0.5rem 1rem',
         borderBottom: '1px solid rgba(255,255,255,0.05)',
         display: 'flex',
     },

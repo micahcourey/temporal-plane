@@ -238,6 +238,57 @@ a:hover {
   animation-delay: 300ms;
 }
 
+/* New Interactive Animations */
+.float {
+  animation: float 6s ease-in-out infinite;
+}
+
+@keyframes float {
+  0% {
+    transform: translateY(0px);
+  }
+
+  50% {
+    transform: translateY(-20px);
+  }
+
+  100% {
+    transform: translateY(0px);
+  }
+}
+
+.pulse-glow {
+  animation: pulseGlow 4s ease-in-out infinite;
+}
+
+@keyframes pulseGlow {
+  0% {
+    filter: drop-shadow(0 0 20px rgba(20, 184, 166, 0.2));
+  }
+
+  50% {
+    filter: drop-shadow(0 0 50px rgba(20, 184, 166, 0.5));
+  }
+
+  100% {
+    filter: drop-shadow(0 0 20px rgba(20, 184, 166, 0.2));
+  }
+}
+
+.feature-card:hover {
+  transform: translateY(-8px) scale(1.02);
+  border-color: var(--color-primary);
+  box-shadow: 0 10px 40px -10px rgba(20, 184, 166, 0.3);
+}
+
+.feature-card i {
+  transition: transform 0.3s ease;
+}
+
+.feature-card:hover i {
+  transform: scale(1.1) rotate(5deg);
+}
+
 /* Responsive Header & Hero adjustments */
 .desktop-nav {
   display: flex;
