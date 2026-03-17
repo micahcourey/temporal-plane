@@ -114,39 +114,39 @@ export default function DetailedFeatures() {
                         ) : (
                             <div className="glass-card" style={styles.diagramWindow}>
                                 {activeFeature.diagram === 'storage' && (
-                                    <div style={styles.storageDiagram}>
+                                    <div className="storage-diagram" style={styles.storageDiagram}>
                                         {/* Node 1 */}
-                                        <div style={styles.diagramNode}>
-                                            <div style={styles.iconWrapper}>
+                                        <div className="diagram-node" style={styles.diagramNode}>
+                                            <div className="icon-wrapper" style={styles.iconWrapper}>
                                                 <Terminal size={28} className="text-primary" />
                                             </div>
-                                            <span style={styles.nodeLabel}>Your Agent</span>
+                                            <span className="node-label" style={styles.nodeLabel}>Your Agent</span>
                                         </div>
 
                                         {/* Connector 1 */}
-                                        <div style={styles.connector}>
+                                        <div className="connector" style={styles.connector}>
                                             <ArrowRight size={24} className="text-muted" />
                                         </div>
 
                                         {/* Node 2 */}
-                                        <div style={styles.diagramNode}>
-                                            <div style={{ ...styles.iconWrapper, ...styles.pulseDisk }} className="pulse-glow">
+                                        <div className="diagram-node" style={styles.diagramNode}>
+                                            <div className="icon-wrapper pulse-glow" style={{ ...styles.iconWrapper, ...styles.pulseDisk }}>
                                                 <Database size={28} />
                                             </div>
-                                            <span style={styles.nodeLabel}>LanceDB (local)</span>
+                                            <span className="node-label" style={styles.nodeLabel}>LanceDB (local)</span>
                                         </div>
 
                                         {/* Connector 2 */}
-                                        <div style={styles.connector}>
+                                        <div className="connector" style={styles.connector}>
                                             <ArrowRight size={24} className="text-muted" />
                                         </div>
 
                                         {/* Node 3 */}
-                                        <div style={styles.diagramNode}>
-                                            <div style={styles.iconWrapper}>
+                                        <div className="diagram-node" style={styles.diagramNode}>
+                                            <div className="icon-wrapper" style={styles.iconWrapper}>
                                                 <Layers size={28} className="text-secondary" />
                                             </div>
-                                            <span style={styles.nodeLabel}>Memory Records</span>
+                                            <span className="node-label" style={styles.nodeLabel}>Memory Records</span>
                                         </div>
                                     </div>
                                 )}
@@ -309,7 +309,7 @@ const styles = {
     },
     storageDiagram: {
         display: 'flex',
-        alignItems: 'flex-start',
+        alignItems: 'center',
         gap: '0',
         justifyContent: 'center',
     },

@@ -1,4 +1,4 @@
-import { Github, Twitter } from 'lucide-react';
+import { Github, Linkedin } from 'lucide-react';
 
 export default function Footer() {
     return (
@@ -18,29 +18,29 @@ export default function Footer() {
                     <div style={styles.links}>
                         <div style={styles.linkCol}>
                             <h4 style={styles.colTitle}>Resources</h4>
-                            <a href="#docs" style={styles.link}>Documentation</a>
-                            <a href="#quickstart" style={styles.link}>Quickstart</a>
-                            <a href="#examples" style={styles.link}>Examples</a>
+                            <a href="https://docs.mnemix.org/guide/" style={styles.link}>Documentation</a>
+                            <a href="https://docs.mnemix.org/guide/#quick-start" style={styles.link}>Quickstart</a>
+                            <a href="https://docs.mnemix.org/guide/host-adapters" style={styles.link}>Examples</a>
                         </div>
                         <div style={styles.linkCol}>
                             <h4 style={styles.colTitle}>Project</h4>
                             <a href="https://github.com/micahcourey/mnemix" style={styles.link}>GitHub</a>
                             <a href="https://github.com/micahcourey/mnemix/releases" style={styles.link}>Releases</a>
-                            <a href="#license" style={styles.link}>License</a>
+                            <a href="https://github.com/micahcourey/mnemix/blob/main/LICENSE" style={styles.link}>License</a>
                         </div>
                     </div>
                 </div>
 
                 <div style={styles.bottom}>
                     <p style={styles.copyright}>
-                        © {new Date().getFullYear()} Mnemix. MIT License.
+                        © {new Date().getFullYear()} Mnemix by Micah Courey. MIT License.
                     </p>
                     <div style={styles.socials}>
                         <a href="https://github.com/micahcourey/mnemix" style={styles.socialLink} aria-label="GitHub">
                             <Github size={20} />
                         </a>
-                        <a href="#" style={styles.socialLink} aria-label="Twitter">
-                            <Twitter size={20} />
+                        <a href="https://www.linkedin.com/in/micahcourey/" target="_blank" rel="noreferrer" style={styles.socialLink} aria-label="LinkedIn">
+                            <Linkedin size={20} />
                         </a>
                     </div>
                 </div>

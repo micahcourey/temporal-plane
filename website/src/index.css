@@ -232,6 +232,42 @@ a:hover {
     min-width: auto !important;
     flex: 1;
   }
+
+  /* Storage Diagram Responsiveness */
+  .storage-diagram {
+    gap: 0 !important;
+    width: 100% !important;
+  }
+
+  .diagram-node {
+    width: 28% !important;
+    min-width: 80px !important;
+    gap: 0.5rem !important;
+  }
+
+  .diagram-node .icon-wrapper {
+    width: 48px !important;
+    height: 48px !important;
+  }
+
+  .diagram-node .icon-wrapper lucide-icon,
+  .diagram-node .icon-wrapper svg {
+    width: 20px !important;
+    height: 20px !important;
+  }
+
+  .node-label {
+    font-size: 0.65rem !important;
+    letter-spacing: 0.05em !important;
+  }
+
+  .connector {
+    width: 20px !important;
+  }
+
+  .connector svg {
+    width: 16px !important;
+  }
 }
 
 /* Animations */
