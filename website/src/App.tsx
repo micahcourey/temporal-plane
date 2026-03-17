@@ -14,7 +14,6 @@ function App() {
         <Hero />
         <Features />
         <DetailedFeatures />
-        {/* <Ecosystem /> */}
         <HowItWorks />
       </main>
       <Footer />
