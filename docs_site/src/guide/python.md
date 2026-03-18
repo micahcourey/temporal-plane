@@ -118,3 +118,6 @@ decides:
 
 See [Host Adapters](/guide/host-adapters) for the workflow-specific adapter
 patterns currently included in the repository.
+
+See [Policy Runner](/guide/policy-runner) for the layer that decides when
+memory actions are recommended or required at workflow checkpoints.
