@@ -11,6 +11,9 @@ from mnemix.models import (
     MemorySummary,
     OptimizeRequest,
     OptimizeResult,
+    PolicyCheckRequest,
+    PolicyDecisionResult,
+    PolicyRecordRequest,
     RecallEntry,
     RecallRequest,
     RecallResult,
@@ -18,6 +21,7 @@ from mnemix.models import (
     RestoreRequest,
     RestoreResult,
     SearchRequest,
+    StatusResult,
     StoreStats,
     VersionRecord,
 )
@@ -137,6 +141,19 @@ class TestOptimizeRequest:
         req = OptimizeRequest()
         assert req.prune is False
         assert req.older_than_days == 30
+
+
+class TestPolicyCheckRequest:
+    def test_defaults(self) -> None:
+        req = PolicyCheckRequest(trigger="on_git_commit")
+        assert req.workflow_key is None
+        assert req.paths == []
+
+
+class TestPolicyRecordRequest:
+    def test_skip_reason_requires_reason(self) -> None:
+        with pytest.raises(ValueError, match="Provide 'reason'"):
+            PolicyRecordRequest(workflow_key="wf-1", action="skip_reason")
 
 
 # ---------------------------------------------------------------------------
@@ -351,6 +368,52 @@ class TestOptimizeResult:
         assert result.retention.minimum_age_days == 30
         assert result.retention.delete_unverified is False
         assert result.retention.error_if_tagged_old_versions is True
+
+
+class TestStatusResult:
+    def test_from_dict(self) -> None:
+        result = StatusResult.from_dict(
+            {
+                "command": "policy",
+                "status": "recorded",
+                "message": "Recorded `writeback` for workflow `wf-1`",
+                "path": "/tmp/store",
+                "schema_version": None,
+            }
+        )
+        assert result.command == "policy"
+        assert result.status == "recorded"
+
+
+class TestPolicyDecisionResult:
+    def test_from_dict(self) -> None:
+        result = PolicyDecisionResult.from_dict(
+            {
+                "command": "policy",
+                "action": "check",
+                "trigger": "on_git_commit",
+                "workflow_key": "wf-1",
+                "decision": "block",
+                "scope_strategy": "repo",
+                "matched_rules": [
+                    {
+                        "id": "commit-writeback",
+                        "mode": "required_with_skip_reason",
+                        "satisfied": False,
+                        "skipped_via_reason": False,
+                        "required_actions": ["writeback"],
+                        "missing_actions": ["writeback"],
+                        "reasons": ["Rule `commit-writeback` is missing: writeback."],
+                    }
+                ],
+                "required_actions": ["writeback"],
+                "missing_actions": ["writeback"],
+                "reasons": ["Rule `commit-writeback` is missing: writeback."],
+            }
+        )
+        assert result.decision == "block"
+        assert result.matched_rules[0].id == "commit-writeback"
+        assert result.matched_rules[0].missing_actions == ["writeback"]
 
 
 # ---------------------------------------------------------------------------

@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, path::Path};
 
 use mnemix_core::{
     CheckpointSelector, Confidence, Importance, MemoryRecord, OptimizeRequest, OptimizeResult,
-    PinState, QueryLimit, RestoreResult,
+    PinState, PolicyDecision, QueryLimit, RestoreResult,
 };
 use mnemix_lancedb::{LanceDbBackend, LanceDbError};
 
@@ -25,6 +25,7 @@ mod import;
 mod init;
 mod optimize;
 mod pins;
+mod policy;
 mod recall;
 mod remember;
 mod restore;
@@ -49,6 +50,7 @@ pub(crate) fn execute(command: &Command, store_path: &Path) -> Result<CommandOut
         Command::Stats(args) => stats::run(store_path, args),
         Command::Export(args) => export::run(store_path, args),
         Command::Import(args) => import::run(store_path, args),
+        Command::Policy(args) => policy::run(store_path, args),
     }
 }
 
@@ -180,6 +182,20 @@ pub(super) fn checkpoint_result(
         action,
         checkpoint: checkpoint_view(checkpoint),
     }))
+}
+
+pub(super) fn policy_result(
+    action: &'static str,
+    trigger: String,
+    workflow_key: Option<String>,
+    decision: &PolicyDecision,
+) -> CommandOutput {
+    CommandOutput::Policy(Box::new(crate::output::policy_decision_view(
+        action,
+        trigger,
+        workflow_key,
+        decision,
+    )))
 }
 
 pub(super) fn version_list_result(

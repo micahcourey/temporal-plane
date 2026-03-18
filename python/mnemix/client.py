@@ -40,12 +40,16 @@ from .models import (
     MemorySummary,
     OptimizeRequest,
     OptimizeResult,
+    PolicyCheckRequest,
+    PolicyDecisionResult,
+    PolicyRecordRequest,
     RecallRequest,
     RecallResult,
     RememberRequest,
     RestoreRequest,
     RestoreResult,
     SearchRequest,
+    StatusResult,
     StoreStats,
     VersionRecord,
 )
@@ -317,6 +321,32 @@ class Mnemix:
         data = self._run("stats", args)
         return StoreStats.from_dict(data["stats"])
 
+    # ------------------------------------------------------------------
+    # Policy runner
+    # ------------------------------------------------------------------
+
+    def policy_check(self, request: PolicyCheckRequest) -> PolicyDecisionResult:
+        """Evaluate policy requirements for a workflow trigger."""
+        data = self._run("policy", self._policy_check_args("check", request))
+        return PolicyDecisionResult.from_dict(data)
+
+    def policy_explain(self, request: PolicyCheckRequest) -> PolicyDecisionResult:
+        """Explain the policy decision for a workflow trigger."""
+        data = self._run("policy", self._policy_check_args("explain", request))
+        return PolicyDecisionResult.from_dict(data)
+
+    def policy_record(self, request: PolicyRecordRequest) -> StatusResult:
+        """Record policy evidence for a workflow key."""
+        args = [
+            "record",
+            "--workflow-key", request.workflow_key,
+            "--action", request.action,
+        ]
+        if request.reason is not None:
+            args += ["--reason", request.reason]
+        data = self._run("policy", args)
+        return StatusResult.from_dict(data)
+
     def export(self, destination: Path | str) -> None:
         """Export the store to a file.
 
@@ -332,3 +362,24 @@ class Mnemix:
             source: Path to the export archive to import.
         """
         self._run("import", ["--source", str(source)])
+
+    def _policy_check_args(
+        self,
+        action: str,
+        request: PolicyCheckRequest,
+    ) -> list[str]:
+        args = [
+            action,
+            "--trigger", request.trigger,
+        ]
+        if request.workflow_key is not None:
+            args += ["--workflow-key", request.workflow_key]
+        if request.host is not None:
+            args += ["--host", request.host]
+        if request.task_kind is not None:
+            args += ["--task-kind", request.task_kind]
+        if request.scope is not None:
+            args += ["--scope", request.scope]
+        for path in request.paths:
+            args += ["--path", path]
+        return args
