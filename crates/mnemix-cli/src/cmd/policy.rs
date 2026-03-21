@@ -51,7 +51,7 @@ fn check(
         action,
         args.trigger.as_str().to_owned(),
         args.workflow_key.clone(),
-        &with_missing_config_reason(config, decision),
+        &with_missing_config_reason(&config, decision),
     ))
 }
 
@@ -121,15 +121,14 @@ fn build_context(args: &PolicyCheckArgs) -> PolicyContext {
 }
 
 fn with_missing_config_reason(
-    config: PolicyConfig,
+    config: &PolicyConfig,
     mut decision: PolicyDecision,
 ) -> PolicyDecision {
     if config.rules.is_empty() {
         decision.reasons.insert(
             0,
             format!(
-                "No `{}` file was found or it did not contain any rules; defaulting to allow.",
-                POLICY_CONFIG_FILENAME
+                "No `{POLICY_CONFIG_FILENAME}` file was found or it did not contain any rules; defaulting to allow."
             ),
         );
     }
