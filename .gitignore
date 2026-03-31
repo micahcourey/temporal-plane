@@ -29,8 +29,8 @@ python/dist/
 coverage/
 htmlcov/
 
-# Dex is intentionally committed for shared task tracking.
-!.dex/
+# Workflow artifacts are intentionally committed for shared task tracking.
+!workflow/
 
 # Website & Docs
 node_modules/
