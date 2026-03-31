@@ -25,9 +25,8 @@ The compliance agent is intentionally not part of this setup.
 
 ## Practical Guidance
 
-- follow Dex for multi-step work
+- follow the repo-native `workflow/` artifacts for multi-step work
 - consult `.ai/context/` only as needed
 - prefer project docs in `docs/` when planning or architecture is involved
 
 *Update `toolkit.config.yaml` and regenerate when project conventions change.*
-

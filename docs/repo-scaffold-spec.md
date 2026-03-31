@@ -140,7 +140,7 @@ The root workspace should enforce:
 - formatting and lint configuration
 - shared package metadata
 - CI checks for fmt, clippy, test, doc, and dependency policy
-- tracked Dex project instructions via [AGENTS.md](../AGENTS.md)
+- tracked workflow project instructions via [AGENTS.md](../AGENTS.md)
 
 ## Deferred until later milestones
 
