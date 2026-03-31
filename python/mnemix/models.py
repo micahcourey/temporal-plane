@@ -31,6 +31,8 @@ RecallReason = Literal[
     "pinned",
     "scope_filter",
     "text_match",
+    "semantic_match",
+    "hybrid_match",
     "summary_kind",
     "importance_boost",
     "recency_boost",

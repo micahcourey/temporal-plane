@@ -1,6 +1,7 @@
 //! Local `LanceDB` backend implementation.
 
 use std::{
+    cmp::Ordering,
     collections::HashMap,
     future::Future,
     path::{Path, PathBuf},
@@ -9,7 +10,8 @@ use std::{
 };
 
 use arrow_array::{
-    Array, BooleanArray, RecordBatch, RecordBatchIterator, StringArray, UInt32Array, UInt64Array,
+    Array, BooleanArray, FixedSizeListArray, Float32Array, ListArray, RecordBatch,
+    RecordBatchIterator, StringArray, UInt32Array, UInt64Array, types::Float32Type,
 };
 use arrow_schema::{DataType, Field, Schema};
 use futures::TryStreamExt;
@@ -35,7 +37,8 @@ use mnemix_core::{
     memory::{MemoryKind, MemoryRecord, PinState},
     query::{
         DisclosureDepth, HistoryQuery, QueryLimit, RecallEntry, RecallExplanation, RecallLayer,
-        RecallQuery, RecallReason, RecallResult, SearchQuery, StatsQuery, StatsSnapshot,
+        RecallQuery, RecallReason, RecallResult, RetrievalMode, SearchQuery, StatsQuery,
+        StatsSnapshot,
     },
     retention::{CleanupMode, PreOperationCheckpointPolicy},
     traits::{
@@ -50,8 +53,14 @@ use tokio::runtime::{Builder, Handle, Runtime};
 const MEMORIES_TABLE: &str = "memories";
 const CHECKPOINTS_TABLE: &str = "checkpoints";
 const SCHEMA_METADATA_TABLE: &str = "schema_metadata";
+const VECTOR_CONFIG_TABLE: &str = "vector_config";
+const MEMORY_EMBEDDINGS_TABLE: &str = "memory_embeddings";
 const PAYLOAD_COLUMN: &str = "payload_json";
-const SCHEMA_VERSION: u64 = 1;
+const LEGACY_SCHEMA_VERSION: u64 = 1;
+const VECTOR_CONFIG_SCHEMA_VERSION: u64 = 2;
+const PERSISTED_EMBEDDING_SCHEMA_VERSION: u64 = 3;
+const INDEXABLE_EMBEDDING_SCHEMA_VERSION: u64 = 4;
+const SCHEMA_VERSION: u64 = INDEXABLE_EMBEDDING_SCHEMA_VERSION;
 /// Maximum pinned-context entries surfaced for any recall request.
 const PINNED_CONTEXT_HARD_CAP: usize = 3;
 /// Bounded over-fetch window used so product-side recall ranking can bucket
@@ -188,6 +197,335 @@ pub enum LanceDbError {
     /// Indicates a sync wrapper was called from within an async runtime.
     #[error("sync LanceDB backend APIs cannot be called from an async runtime")]
     UnsupportedCallerContext,
+
+    /// Indicates vector settings are internally inconsistent or incompatible
+    /// with the selected embedding provider.
+    #[error("invalid vector settings: {details}")]
+    InvalidVectorSettings {
+        /// Human-readable settings validation failure details.
+        details: String,
+    },
+}
+
+/// Embedding-provider-specific failures returned by backend-owned providers.
+#[non_exhaustive]
+#[derive(Debug, Error)]
+pub enum EmbeddingProviderError {
+    /// Indicates the provider could not generate an embedding for the input.
+    #[error("{message}")]
+    Message {
+        /// Human-readable provider failure details.
+        message: String,
+    },
+}
+
+/// A backend-owned embedding provider used for vector-enabled stores.
+pub trait EmbeddingProvider: Send + Sync {
+    /// Returns the stable provider model identifier.
+    fn model_id(&self) -> &str;
+
+    /// Returns the embedding dimensions produced by the provider.
+    fn dimensions(&self) -> u32;
+
+    /// Embeds a single input string.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`EmbeddingProviderError`] when the provider cannot embed the
+    /// supplied input.
+    fn embed(&self, text: &str) -> Result<Vec<f32>, EmbeddingProviderError>;
+}
+
+/// Store-level vector configuration persisted by the LanceDB backend.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct VectorSettings {
+    vectors_enabled: bool,
+    auto_embed_on_write: bool,
+    embedding_model: Option<String>,
+    embedding_dimensions: Option<u32>,
+}
+
+/// Operational readiness for the current store's persisted vector shape.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct VectorIndexStatus {
+    available: bool,
+    reason: Option<String>,
+}
+
+impl VectorIndexStatus {
+    /// Returns `true` when a LanceDB-native vector index can be built and used.
+    #[must_use]
+    pub const fn available(&self) -> bool {
+        self.available
+    }
+
+    /// Returns a human-readable explanation when the vector index is unavailable.
+    #[must_use]
+    pub fn reason(&self) -> Option<&str> {
+        self.reason.as_deref()
+    }
+}
+
+/// Store-level vector runtime and coverage snapshot.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct VectorStatus {
+    settings: VectorSettings,
+    has_embedding_provider: bool,
+    can_embed_on_write: bool,
+    semantic_retrieval_available: bool,
+    persisted_embedding_storage: bool,
+    indexable_embedding_storage: bool,
+    total_memories: u64,
+    embedded_memories: u64,
+    vector_index: VectorIndexStatus,
+}
+
+impl VectorStatus {
+    /// Returns the store's persisted vector settings.
+    #[must_use]
+    pub const fn settings(&self) -> &VectorSettings {
+        &self.settings
+    }
+
+    /// Returns `true` when a runtime embedding provider is attached.
+    #[must_use]
+    pub const fn has_embedding_provider(&self) -> bool {
+        self.has_embedding_provider
+    }
+
+    /// Returns `true` when new writes can be embedded immediately.
+    #[must_use]
+    pub const fn can_embed_on_write(&self) -> bool {
+        self.can_embed_on_write
+    }
+
+    /// Returns `true` when semantic retrieval can run for this store.
+    #[must_use]
+    pub const fn semantic_retrieval_available(&self) -> bool {
+        self.semantic_retrieval_available
+    }
+
+    /// Returns `true` when the current schema can persist embedding values.
+    #[must_use]
+    pub const fn persisted_embedding_storage(&self) -> bool {
+        self.persisted_embedding_storage
+    }
+
+    /// Returns `true` when the current store has a fixed-size embedding schema
+    /// suitable for future LanceDB-native vector indexing.
+    #[must_use]
+    pub const fn indexable_embedding_storage(&self) -> bool {
+        self.indexable_embedding_storage
+    }
+
+    /// Returns the total number of memories stored in the backend.
+    #[must_use]
+    pub const fn total_memories(&self) -> u64 {
+        self.total_memories
+    }
+
+    /// Returns the number of memories that currently have persisted embeddings.
+    #[must_use]
+    pub const fn embedded_memories(&self) -> u64 {
+        self.embedded_memories
+    }
+
+    /// Returns the current LanceDB-native vector-index readiness snapshot.
+    #[must_use]
+    pub const fn vector_index(&self) -> &VectorIndexStatus {
+        &self.vector_index
+    }
+
+    /// Returns whole-percent persisted embedding coverage for the store.
+    #[must_use]
+    pub fn embedding_coverage_percent(&self) -> u8 {
+        if self.total_memories == 0 {
+            return 0;
+        }
+
+        let percent = (self.embedded_memories.saturating_mul(100)) / self.total_memories;
+        percent.min(100) as u8
+    }
+}
+
+impl VectorSettings {
+    /// Returns `true` when vector retrieval is enabled for the store.
+    #[must_use]
+    pub const fn vectors_enabled(&self) -> bool {
+        self.vectors_enabled
+    }
+
+    /// Returns `true` when new writes should auto-embed when a provider is
+    /// available.
+    #[must_use]
+    pub const fn auto_embed_on_write(&self) -> bool {
+        self.auto_embed_on_write
+    }
+
+    /// Returns the configured embedding model identifier, if any.
+    #[must_use]
+    pub fn embedding_model(&self) -> Option<&str> {
+        self.embedding_model.as_deref()
+    }
+
+    /// Returns the configured embedding dimensions, if any.
+    #[must_use]
+    pub const fn embedding_dimensions(&self) -> Option<u32> {
+        self.embedding_dimensions
+    }
+}
+
+/// A request to enable vector settings for a store.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct VectorEnableRequest {
+    embedding_model: String,
+    embedding_dimensions: u32,
+    auto_embed_on_write: bool,
+}
+
+impl VectorEnableRequest {
+    /// Creates a validated vector-enablement request.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError`] when the model is blank or the dimensions are out
+    /// of range.
+    pub fn new(
+        embedding_model: impl Into<String>,
+        embedding_dimensions: u32,
+    ) -> Result<Self, CoreError> {
+        let embedding_model = embedding_model.into();
+        let embedding_model = embedding_model.trim();
+        if embedding_model.is_empty() {
+            return Err(CoreError::EmptyValue {
+                field: "embedding_model",
+            });
+        }
+        if embedding_dimensions == 0 {
+            return Err(CoreError::OutOfRange {
+                field: "embedding_dimensions",
+                min: 1,
+                max: u64::from(u32::MAX),
+                actual: 0,
+            });
+        }
+
+        Ok(Self {
+            embedding_model: embedding_model.to_owned(),
+            embedding_dimensions,
+            auto_embed_on_write: false,
+        })
+    }
+
+    /// Returns the configured embedding model identifier.
+    #[must_use]
+    pub fn embedding_model(&self) -> &str {
+        &self.embedding_model
+    }
+
+    /// Returns the requested embedding dimensions.
+    #[must_use]
+    pub const fn embedding_dimensions(&self) -> u32 {
+        self.embedding_dimensions
+    }
+
+    /// Returns whether auto-embed-on-write should be enabled.
+    #[must_use]
+    pub const fn auto_embed_on_write(&self) -> bool {
+        self.auto_embed_on_write
+    }
+
+    /// Enables or disables auto-embed-on-write.
+    #[must_use]
+    pub fn with_auto_embed_on_write(mut self, auto_embed_on_write: bool) -> Self {
+        self.auto_embed_on_write = auto_embed_on_write;
+        self
+    }
+}
+
+/// A request to plan or apply an embedding backfill.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct EmbeddingBackfillRequest {
+    apply: bool,
+}
+
+impl EmbeddingBackfillRequest {
+    /// Creates a dry-run backfill request.
+    #[must_use]
+    pub const fn plan() -> Self {
+        Self { apply: false }
+    }
+
+    /// Creates an apply-mode backfill request.
+    #[must_use]
+    pub const fn apply() -> Self {
+        Self { apply: true }
+    }
+
+    /// Returns whether the request should apply writes.
+    #[must_use]
+    pub const fn apply_writes(&self) -> bool {
+        self.apply
+    }
+}
+
+/// A result describing a backfill plan or execution.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct EmbeddingBackfillResult {
+    apply: bool,
+    candidate_memories: u64,
+    updated_memories: u64,
+}
+
+impl EmbeddingBackfillResult {
+    /// Creates a backfill result.
+    #[must_use]
+    pub const fn new(apply: bool, candidate_memories: u64, updated_memories: u64) -> Self {
+        Self {
+            apply,
+            candidate_memories,
+            updated_memories,
+        }
+    }
+
+    /// Returns whether the request ran in apply mode.
+    #[must_use]
+    pub const fn apply_writes(&self) -> bool {
+        self.apply
+    }
+
+    /// Returns the number of candidate memories considered for backfill.
+    #[must_use]
+    pub const fn candidate_memories(&self) -> u64 {
+        self.candidate_memories
+    }
+
+    /// Returns the number of memories updated by the backfill.
+    #[must_use]
+    pub const fn updated_memories(&self) -> u64 {
+        self.updated_memories
+    }
+}
+
+/// Runtime options for opening a LanceDB-backed store.
+#[derive(Clone, Default)]
+pub struct LanceDbOpenOptions {
+    embedding_provider: Option<Arc<dyn EmbeddingProvider>>,
+}
+
+impl LanceDbOpenOptions {
+    /// Starts building backend open options.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Attaches a runtime embedding provider to the backend.
+    #[must_use]
+    pub fn embedding_provider(mut self, provider: Arc<dyn EmbeddingProvider>) -> Self {
+        self.embedding_provider = Some(provider);
+        self
+    }
 }
 
 /// A persistent local backend backed by `LanceDB`.
@@ -195,14 +533,61 @@ pub struct LanceDbBackend {
     path: PathBuf,
     runtime: Runtime,
     memories: Table,
+    memory_embeddings: Option<Table>,
     checkpoints: Table,
     schema_metadata: Table,
+    vector_config: Table,
+    schema_version: u64,
+    vector_settings: VectorSettings,
+    embedding_provider: Option<Arc<dyn EmbeddingProvider>>,
+}
+
+#[derive(Clone, Debug)]
+struct PersistedEmbedding {
+    model: String,
+    dimensions: u32,
+    updated_at: SystemTime,
+    values: Vec<f32>,
+}
+
+#[derive(Clone, Debug)]
+struct SemanticCandidate {
+    record: MemoryRecord,
+    score: f32,
+}
+
+#[derive(Clone, Debug)]
+struct RankedMemoryRecord {
+    record: MemoryRecord,
+    lexical_rank: Option<usize>,
+    semantic_rank: Option<usize>,
+    semantic_score: Option<f32>,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+struct MatchSignals {
+    lexical: bool,
+    semantic: bool,
 }
 
 impl std::fmt::Debug for LanceDbBackend {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("LanceDbBackend")
             .field("path", &self.path)
+            .field("schema_version", &self.schema_version)
+            .field("vector_settings", &self.vector_settings)
+            .field(
+                "has_memory_embeddings_table",
+                &self.memory_embeddings.is_some(),
+            )
+            .field(
+                "has_embedding_provider",
+                &self
+                    .embedding_provider
+                    .as_ref()
+                    .map(|_| true)
+                    .unwrap_or(false),
+            )
             .finish_non_exhaustive()
     }
 }
@@ -214,7 +599,21 @@ impl LanceDbBackend {
     ///
     /// Returns [`LanceDbError`] when the store or its required tables cannot be created.
     pub fn init(path: impl AsRef<Path>) -> Result<Self, LanceDbError> {
-        Self::open_internal(path.as_ref(), true)
+        Self::init_with_options(path, LanceDbOpenOptions::default())
+    }
+
+    /// Initializes a local store using explicit runtime options.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LanceDbError`] when the store or its required tables cannot be
+    /// created or the runtime options are incompatible with the store
+    /// configuration.
+    pub fn init_with_options(
+        path: impl AsRef<Path>,
+        options: LanceDbOpenOptions,
+    ) -> Result<Self, LanceDbError> {
+        Self::open_internal(path.as_ref(), true, options)
     }
 
     /// Opens an existing local store.
@@ -223,7 +622,21 @@ impl LanceDbBackend {
     ///
     /// Returns [`LanceDbError`] when the store cannot be opened or required tables are missing.
     pub fn open(path: impl AsRef<Path>) -> Result<Self, LanceDbError> {
-        Self::open_internal(path.as_ref(), false)
+        Self::open_with_options(path, LanceDbOpenOptions::default())
+    }
+
+    /// Opens an existing local store using explicit runtime options.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LanceDbError`] when the store cannot be opened, required
+    /// tables are missing, or the runtime options are incompatible with the
+    /// store configuration.
+    pub fn open_with_options(
+        path: impl AsRef<Path>,
+        options: LanceDbOpenOptions,
+    ) -> Result<Self, LanceDbError> {
+        Self::open_internal(path.as_ref(), false, options)
     }
 
     /// Opens a local store, creating it if it does not exist yet.
@@ -235,7 +648,20 @@ impl LanceDbBackend {
     ///
     /// Returns [`LanceDbError`] when the store cannot be opened or initialized.
     pub fn connect_or_init(path: impl AsRef<Path>) -> Result<Self, LanceDbError> {
-        Self::open_internal(path.as_ref(), true)
+        Self::connect_or_init_with_options(path, LanceDbOpenOptions::default())
+    }
+
+    /// Opens or initializes a local store using explicit runtime options.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LanceDbError`] when the store cannot be opened, initialized,
+    /// or paired with the supplied runtime options.
+    pub fn connect_or_init_with_options(
+        path: impl AsRef<Path>,
+        options: LanceDbOpenOptions,
+    ) -> Result<Self, LanceDbError> {
+        Self::open_internal(path.as_ref(), true, options)
     }
 
     /// Returns the on-disk store path.
@@ -250,6 +676,145 @@ impl LanceDbBackend {
     ///
     /// Returns [`LanceDbError`] when the metadata table cannot be read.
     pub fn schema_version(&self) -> Result<u64, LanceDbError> {
+        Ok(self.schema_version)
+    }
+
+    /// Returns the effective vector settings for the store.
+    #[must_use]
+    pub const fn vector_settings(&self) -> &VectorSettings {
+        &self.vector_settings
+    }
+
+    /// Returns a typed operational vector snapshot for the store.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LanceDbError`] when persisted coverage cannot be counted.
+    pub fn vector_status(&self) -> Result<VectorStatus, LanceDbError> {
+        let total_memories = self.count_memories(None)? as u64;
+        let embedded_memories = self.embedded_memory_count()? as u64;
+
+        Ok(VectorStatus {
+            settings: self.vector_settings.clone(),
+            has_embedding_provider: self.has_embedding_provider(),
+            can_embed_on_write: self.can_embed_on_write(),
+            semantic_retrieval_available: self.supports_semantic_retrieval(),
+            persisted_embedding_storage: self.supports_embedding_storage(),
+            indexable_embedding_storage: self.supports_indexable_embedding_storage(),
+            total_memories,
+            embedded_memories,
+            vector_index: self.vector_index_status(),
+        })
+    }
+
+    /// Returns `true` when a runtime embedding provider is attached.
+    #[must_use]
+    pub fn has_embedding_provider(&self) -> bool {
+        self.embedding_provider.is_some()
+    }
+
+    /// Returns `true` when the store can currently embed new writes.
+    #[must_use]
+    pub fn can_embed_on_write(&self) -> bool {
+        self.supports_embedding_storage()
+            && self.vector_settings.vectors_enabled
+            && self.vector_settings.auto_embed_on_write
+            && self.embedding_provider.is_some()
+    }
+
+    fn supports_semantic_retrieval(&self) -> bool {
+        self.supports_embedding_storage()
+            && self.vector_settings.vectors_enabled
+            && self.embedding_provider.is_some()
+    }
+
+    /// Enables vector settings for the current store.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LanceDbError`] when the current store cannot support vectors
+    /// yet or the requested settings are invalid.
+    pub fn enable_vectors(
+        &mut self,
+        request: &VectorEnableRequest,
+    ) -> Result<VectorSettings, LanceDbError> {
+        if !self.supports_embedding_storage() {
+            return Err(LanceDbError::InvalidVectorSettings {
+                details: format!(
+                    "vector enablement requires schema version {PERSISTED_EMBEDDING_SCHEMA_VERSION} stores"
+                ),
+            });
+        }
+
+        let settings = VectorSettings {
+            vectors_enabled: true,
+            auto_embed_on_write: request.auto_embed_on_write(),
+            embedding_model: Some(request.embedding_model().to_owned()),
+            embedding_dimensions: Some(request.embedding_dimensions()),
+        };
+        self.validate_vector_settings(&settings)?;
+        if self.schema_version >= INDEXABLE_EMBEDDING_SCHEMA_VERSION {
+            self.ensure_memory_embeddings_table(request.embedding_dimensions())?;
+        }
+        self.write_vector_settings(&settings)?;
+        self.vector_settings = settings.clone();
+        Ok(settings)
+    }
+
+    /// Plans or applies an embedding backfill.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LanceDbError`] when vector settings are disabled, runtime
+    /// requirements are missing, or apply mode is requested before write-path
+    /// embedding storage is implemented.
+    pub fn backfill_embeddings(
+        &mut self,
+        request: &EmbeddingBackfillRequest,
+    ) -> Result<EmbeddingBackfillResult, LanceDbError> {
+        if !self.supports_embedding_storage() {
+            return Err(LanceDbError::InvalidVectorSettings {
+                details: format!(
+                    "embedding backfill requires schema version {PERSISTED_EMBEDDING_SCHEMA_VERSION} stores"
+                ),
+            });
+        }
+        if !self.vector_settings.vectors_enabled {
+            return Err(LanceDbError::InvalidVectorSettings {
+                details: "vectors must be enabled before planning or applying backfill".to_owned(),
+            });
+        }
+
+        let candidate_memories = self.count_memories(None)? as u64;
+        if !request.apply_writes() {
+            return Ok(EmbeddingBackfillResult::new(false, candidate_memories, 0));
+        }
+
+        if self.embedding_provider.is_none() {
+            return Err(LanceDbError::Core(CoreError::CapabilityUnavailable {
+                capability: "embedding_provider",
+            }));
+        }
+
+        let records =
+            decode_memory_records(self.query_payloads(&self.memories, None, None, None)?)?;
+        let mut updated_memories = 0_u64;
+        for record in &records {
+            if let Some(embedding) = self.embedding_for_record(record)? {
+                self.update_memory_embedding(record.id(), &embedding)?;
+                self.upsert_fixed_size_memory_embedding(record.id(), &embedding)?;
+                updated_memories += 1;
+            }
+        }
+
+        Ok(EmbeddingBackfillResult::new(
+            true,
+            candidate_memories,
+            updated_memories,
+        ))
+    }
+
+    fn read_schema_version(&self) -> Result<u64, LanceDbError> {
         let batches: Vec<RecordBatch> = self.block_on(async {
             let stream: SendableRecordBatchStream = self
                 .schema_metadata
@@ -295,6 +860,90 @@ impl LanceDbBackend {
         Ok(column.value(0))
     }
 
+    fn read_vector_settings(&self) -> Result<VectorSettings, LanceDbError> {
+        let batches: Vec<RecordBatch> = self.block_on(async {
+            let stream: SendableRecordBatchStream = self
+                .vector_config
+                .query()
+                .select(Select::Columns(vec![
+                    "vectors_enabled".to_owned(),
+                    "auto_embed_on_write".to_owned(),
+                    "embedding_model".to_owned(),
+                    "embedding_dimensions".to_owned(),
+                ]))
+                .limit(1)
+                .execute()
+                .await?;
+            let batches: Vec<RecordBatch> = stream.try_collect().await?;
+            Ok::<Vec<RecordBatch>, lancedb::Error>(batches)
+        })?;
+
+        let Some(batch) = batches.first() else {
+            return Err(LanceDbError::InvalidData {
+                field: "vector_config",
+                details: "missing vector config row".to_owned(),
+            });
+        };
+        let Some(vectors_enabled) = batch
+            .column_by_name("vectors_enabled")
+            .and_then(|column| column.as_any().downcast_ref::<BooleanArray>())
+        else {
+            return Err(LanceDbError::InvalidData {
+                field: "vectors_enabled",
+                details: "expected Boolean column".to_owned(),
+            });
+        };
+        let Some(auto_embed_on_write) = batch
+            .column_by_name("auto_embed_on_write")
+            .and_then(|column| column.as_any().downcast_ref::<BooleanArray>())
+        else {
+            return Err(LanceDbError::InvalidData {
+                field: "auto_embed_on_write",
+                details: "expected Boolean column".to_owned(),
+            });
+        };
+        let Some(embedding_model) = batch
+            .column_by_name("embedding_model")
+            .and_then(|column| column.as_any().downcast_ref::<StringArray>())
+        else {
+            return Err(LanceDbError::InvalidData {
+                field: "embedding_model",
+                details: "expected Utf8 column".to_owned(),
+            });
+        };
+        let Some(embedding_dimensions) = batch
+            .column_by_name("embedding_dimensions")
+            .and_then(|column| column.as_any().downcast_ref::<UInt32Array>())
+        else {
+            return Err(LanceDbError::InvalidData {
+                field: "embedding_dimensions",
+                details: "expected UInt32 column".to_owned(),
+            });
+        };
+
+        if vectors_enabled.is_empty() || auto_embed_on_write.is_empty() {
+            return Err(LanceDbError::InvalidData {
+                field: "vector_config",
+                details: "missing vector config value".to_owned(),
+            });
+        }
+        if vectors_enabled.is_null(0) || auto_embed_on_write.is_null(0) {
+            return Err(LanceDbError::InvalidData {
+                field: "vector_config",
+                details: "null vector config boolean".to_owned(),
+            });
+        }
+
+        Ok(VectorSettings {
+            vectors_enabled: vectors_enabled.value(0),
+            auto_embed_on_write: auto_embed_on_write.value(0),
+            embedding_model: (!embedding_model.is_null(0))
+                .then(|| embedding_model.value(0).to_owned()),
+            embedding_dimensions: (!embedding_dimensions.is_null(0))
+                .then(|| embedding_dimensions.value(0)),
+        })
+    }
+
     /// Deletes a memory by identifier.
     ///
     /// # Errors
@@ -307,6 +956,9 @@ impl LanceDbBackend {
         }
 
         self.block_on(self.memories.delete(&filter))?;
+        if let Some(table) = self.memory_embeddings.as_ref() {
+            self.block_on(table.delete(&string_filter("memory_id", id.as_str())))?;
+        }
         Ok(true)
     }
 
@@ -488,7 +1140,11 @@ impl LanceDbBackend {
         ))
     }
 
-    fn open_internal(path: &Path, create_missing: bool) -> Result<Self, LanceDbError> {
+    fn open_internal(
+        path: &Path,
+        create_missing: bool,
+        options: LanceDbOpenOptions,
+    ) -> Result<Self, LanceDbError> {
         if Handle::try_current().is_ok() {
             return Err(LanceDbError::UnsupportedCallerContext);
         }
@@ -538,17 +1194,30 @@ impl LanceDbBackend {
             &existing_tables,
             create_missing,
         )?;
+        let vector_config =
+            Self::open_or_create_vector_config_table(&runtime, &connection, &existing_tables)?;
+        let memory_embeddings =
+            Self::open_memory_embeddings_table(&runtime, &connection, &existing_tables)?;
 
-        let backend = Self {
+        let mut backend = Self {
             path: path.to_path_buf(),
             runtime,
             memories,
+            memory_embeddings,
             checkpoints,
             schema_metadata,
+            vector_config,
+            schema_version: 0,
+            vector_settings: VectorSettings::default(),
+            embedding_provider: options.embedding_provider,
         };
 
         backend.ensure_fts_index()?;
         backend.ensure_schema_version_row()?;
+        backend.ensure_vector_config_row()?;
+        backend.schema_version = backend.read_schema_version()?;
+        backend.vector_settings = backend.read_vector_settings()?;
+        backend.validate_vector_runtime()?;
         Ok(backend)
     }
 
@@ -570,7 +1239,7 @@ impl LanceDbBackend {
 
         Ok(runtime.block_on(
             connection
-                .create_empty_table(MEMORIES_TABLE, memories_schema())
+                .create_empty_table(MEMORIES_TABLE, memories_schema(SCHEMA_VERSION))
                 .execute(),
         )?)
     }
@@ -624,6 +1293,42 @@ impl LanceDbBackend {
         )?)
     }
 
+    fn open_or_create_vector_config_table(
+        runtime: &Runtime,
+        connection: &Connection,
+        existing_tables: &[String],
+    ) -> Result<Table, LanceDbError> {
+        if existing_tables
+            .iter()
+            .any(|name| name == VECTOR_CONFIG_TABLE)
+        {
+            return Ok(runtime.block_on(connection.open_table(VECTOR_CONFIG_TABLE).execute())?);
+        }
+
+        Ok(runtime.block_on(
+            connection
+                .create_empty_table(VECTOR_CONFIG_TABLE, vector_config_schema())
+                .execute(),
+        )?)
+    }
+
+    fn open_memory_embeddings_table(
+        runtime: &Runtime,
+        connection: &Connection,
+        existing_tables: &[String],
+    ) -> Result<Option<Table>, LanceDbError> {
+        if existing_tables
+            .iter()
+            .any(|name| name == MEMORY_EMBEDDINGS_TABLE)
+        {
+            return Ok(Some(runtime.block_on(
+                connection.open_table(MEMORY_EMBEDDINGS_TABLE).execute(),
+            )?));
+        }
+
+        Ok(None)
+    }
+
     fn ensure_fts_index(&self) -> Result<(), LanceDbError> {
         let indices: Vec<_> = self.block_on(self.memories.list_indices())?;
         let has_fts = indices.iter().any(|index| {
@@ -657,6 +1362,591 @@ impl LanceDbBackend {
         ));
         self.block_on(self.schema_metadata.add(reader).execute())?;
         Ok(())
+    }
+
+    fn ensure_vector_config_row(&self) -> Result<(), LanceDbError> {
+        if self.block_on(self.vector_config.count_rows(None))? > 0 {
+            return Ok(());
+        }
+
+        let config = VectorSettings::default();
+        let schema = vector_config_schema();
+        let batch = RecordBatch::try_new(
+            schema.clone(),
+            vec![
+                Arc::new(BooleanArray::from(vec![config.vectors_enabled])),
+                Arc::new(BooleanArray::from(vec![config.auto_embed_on_write])),
+                Arc::new(StringArray::from(vec![config.embedding_model.as_deref()])),
+                Arc::new(UInt32Array::from(vec![config.embedding_dimensions])),
+            ],
+        )?;
+        let reader = Box::new(RecordBatchIterator::new(
+            vec![Ok(batch)].into_iter(),
+            schema,
+        ));
+        self.block_on(self.vector_config.add(reader).execute())?;
+        Ok(())
+    }
+
+    fn validate_vector_runtime(&self) -> Result<(), LanceDbError> {
+        self.validate_vector_settings(&self.vector_settings)
+    }
+
+    fn validate_vector_settings(&self, settings: &VectorSettings) -> Result<(), LanceDbError> {
+        if settings.auto_embed_on_write && !settings.vectors_enabled {
+            return Err(LanceDbError::InvalidVectorSettings {
+                details: "auto-embed-on-write requires vectors_enabled=true".to_owned(),
+            });
+        }
+
+        let Some(provider) = self.embedding_provider.as_ref() else {
+            return Ok(());
+        };
+
+        if let Some(model) = settings.embedding_model() {
+            if model != provider.model_id() {
+                return Err(LanceDbError::InvalidVectorSettings {
+                    details: format!(
+                        "configured embedding model `{model}` does not match provider `{}`",
+                        provider.model_id()
+                    ),
+                });
+            }
+        }
+
+        if let Some(dimensions) = settings.embedding_dimensions() {
+            if dimensions != provider.dimensions() {
+                return Err(LanceDbError::InvalidVectorSettings {
+                    details: format!(
+                        "configured embedding dimensions `{dimensions}` do not match provider `{}`",
+                        provider.dimensions()
+                    ),
+                });
+            }
+        }
+
+        Ok(())
+    }
+
+    fn write_vector_settings(&self, settings: &VectorSettings) -> Result<(), LanceDbError> {
+        self.block_on(self.vector_config.delete("true"))?;
+
+        let schema = vector_config_schema();
+        let batch = RecordBatch::try_new(
+            schema.clone(),
+            vec![
+                Arc::new(BooleanArray::from(vec![settings.vectors_enabled()])),
+                Arc::new(BooleanArray::from(vec![settings.auto_embed_on_write()])),
+                Arc::new(StringArray::from(vec![settings.embedding_model()])),
+                Arc::new(UInt32Array::from(vec![settings.embedding_dimensions()])),
+            ],
+        )?;
+        let reader = Box::new(RecordBatchIterator::new(
+            vec![Ok(batch)].into_iter(),
+            schema,
+        ));
+        self.block_on(self.vector_config.add(reader).execute())?;
+        Ok(())
+    }
+
+    fn supports_embedding_storage(&self) -> bool {
+        self.schema_version >= PERSISTED_EMBEDDING_SCHEMA_VERSION
+    }
+
+    fn supports_indexable_embedding_storage(&self) -> bool {
+        self.schema_version >= INDEXABLE_EMBEDDING_SCHEMA_VERSION
+            && self.memory_embeddings.is_some()
+    }
+
+    fn ensure_memory_embeddings_table(&mut self, dimensions: u32) -> Result<(), LanceDbError> {
+        if self.memory_embeddings.is_some() {
+            return Ok(());
+        }
+
+        let uri = self.path.to_string_lossy().to_string();
+        let connection = self.block_on(connect(&uri).execute())?;
+        let existing_tables = self.block_on(connection.table_names().execute())?;
+        if existing_tables
+            .iter()
+            .any(|name| name == MEMORY_EMBEDDINGS_TABLE)
+        {
+            self.memory_embeddings =
+                Some(self.block_on(connection.open_table(MEMORY_EMBEDDINGS_TABLE).execute())?);
+            return Ok(());
+        }
+
+        let table = self.block_on(
+            connection
+                .create_empty_table(
+                    MEMORY_EMBEDDINGS_TABLE,
+                    memory_embeddings_schema(dimensions)?,
+                )
+                .execute(),
+        )?;
+        self.memory_embeddings = Some(table);
+        Ok(())
+    }
+
+    fn vector_index_status(&self) -> VectorIndexStatus {
+        if !self.supports_embedding_storage() {
+            return VectorIndexStatus {
+                available: false,
+                reason: Some(format!(
+                    "schema version {PERSISTED_EMBEDDING_SCHEMA_VERSION} embedding storage is required first"
+                )),
+            };
+        }
+
+        if self.schema_version < INDEXABLE_EMBEDDING_SCHEMA_VERSION {
+            return VectorIndexStatus {
+                available: false,
+                reason: Some(
+                    "store uses schema-v3 List<Float32> embeddings; schema-v4 fixed-size embedding storage is required for LanceDB-native vector indexing"
+                        .to_owned(),
+                ),
+            };
+        }
+
+        if self.memory_embeddings.is_none() {
+            return VectorIndexStatus {
+                available: false,
+                reason: Some(
+                    "enable vectors on this schema-v4 store to create the fixed-size embedding table"
+                        .to_owned(),
+                ),
+            };
+        }
+
+        if self.embedded_memory_count().ok() == Some(0) {
+            return VectorIndexStatus {
+                available: false,
+                reason: Some(
+                    "fixed-size embedding storage exists but contains no persisted embeddings yet"
+                        .to_owned(),
+                ),
+            };
+        }
+
+        VectorIndexStatus {
+            available: false,
+            reason: Some(
+                "fixed-size embedding storage is populated; LanceDB-native vector index creation is not implemented yet"
+                    .to_owned(),
+            ),
+        }
+    }
+
+    fn embedded_memory_count(&self) -> Result<usize, LanceDbError> {
+        if self.schema_version <= LEGACY_SCHEMA_VERSION {
+            return Ok(0);
+        }
+
+        if self.supports_indexable_embedding_storage() {
+            let Some(table) = self.memory_embeddings.as_ref() else {
+                return Ok(0);
+            };
+            return self.block_on(table.count_rows(None));
+        }
+
+        self.count_memories(Some("embedding_model IS NOT NULL".to_owned()))
+    }
+
+    fn embedding_for_record(
+        &self,
+        record: &MemoryRecord,
+    ) -> Result<Option<PersistedEmbedding>, LanceDbError> {
+        if !self.vector_settings.vectors_enabled {
+            return Ok(None);
+        }
+
+        let Some(provider) = self.embedding_provider.as_ref() else {
+            return Ok(None);
+        };
+
+        let values = provider.embed(record.fts_text()).map_err(|error| {
+            LanceDbError::InvalidVectorSettings {
+                details: error.to_string(),
+            }
+        })?;
+        let model =
+            self.vector_settings
+                .embedding_model()
+                .ok_or(LanceDbError::InvalidVectorSettings {
+                    details: "vectors_enabled stores must define embedding_model".to_owned(),
+                })?;
+        let expected_dimensions = self.vector_settings.embedding_dimensions().ok_or(
+            LanceDbError::InvalidVectorSettings {
+                details: "vectors_enabled stores must define embedding_dimensions".to_owned(),
+            },
+        )?;
+        if values.len() != expected_dimensions as usize {
+            return Err(LanceDbError::InvalidVectorSettings {
+                details: format!(
+                    "provider returned {} dimensions but store expects {expected_dimensions}",
+                    values.len()
+                ),
+            });
+        }
+
+        Ok(Some(PersistedEmbedding {
+            model: model.to_owned(),
+            dimensions: expected_dimensions,
+            updated_at: SystemTime::now(),
+            values,
+        }))
+    }
+
+    fn update_memory_embedding(
+        &self,
+        id: &MemoryId,
+        embedding: &PersistedEmbedding,
+    ) -> Result<(), LanceDbError> {
+        let (updated_secs, updated_nanos) =
+            system_time_to_parts(embedding.updated_at, "embedding_updated_at")?;
+
+        self.block_on(
+            self.memories
+                .update()
+                .only_if(string_filter("id", id.as_str()))
+                .column("embedding_model", sql_string_literal(&embedding.model))
+                .column("embedding_dimensions", embedding.dimensions.to_string())
+                .column("embedding_updated_at_secs", updated_secs.to_string())
+                .column("embedding_updated_at_nanos", updated_nanos.to_string())
+                .column("embedding", sql_float32_list_literal(&embedding.values))
+                .execute(),
+        )?;
+        Ok(())
+    }
+
+    fn upsert_fixed_size_memory_embedding(
+        &self,
+        id: &MemoryId,
+        embedding: &PersistedEmbedding,
+    ) -> Result<(), LanceDbError> {
+        let Some(table) = self.memory_embeddings.as_ref() else {
+            return Ok(());
+        };
+
+        self.block_on(table.delete(&string_filter("memory_id", id.as_str())))?;
+        let (schema, batch) = memory_embedding_batch(id, embedding)?;
+        let reader = Box::new(RecordBatchIterator::new(
+            vec![Ok(batch)].into_iter(),
+            schema,
+        ));
+        self.block_on(table.add(reader).execute())?;
+        Ok(())
+    }
+
+    fn semantic_query_embedding(
+        &self,
+        text: Option<&str>,
+    ) -> Result<Option<Vec<f32>>, LanceDbError> {
+        let Some(text) = text else {
+            return Ok(None);
+        };
+        let Some(provider) = self.embedding_provider.as_ref() else {
+            return Ok(None);
+        };
+
+        let values = provider
+            .embed(text)
+            .map_err(|error| LanceDbError::InvalidVectorSettings {
+                details: error.to_string(),
+            })?;
+        let expected_dimensions = self.vector_settings.embedding_dimensions().ok_or(
+            LanceDbError::InvalidVectorSettings {
+                details: "vectors_enabled stores must define embedding_dimensions".to_owned(),
+            },
+        )?;
+        if values.len() != expected_dimensions as usize {
+            return Err(LanceDbError::InvalidVectorSettings {
+                details: format!(
+                    "provider returned {} dimensions but store expects {expected_dimensions}",
+                    values.len()
+                ),
+            });
+        }
+
+        Ok(Some(values))
+    }
+
+    fn query_memory_records_by_ids(
+        &self,
+        ids: &[String],
+        filter: Option<String>,
+    ) -> Result<HashMap<String, MemoryRecord>, LanceDbError> {
+        if ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let batches = self.block_on(async {
+            let mut query = self.memories.query().select(Select::Columns(vec![
+                "id".to_owned(),
+                PAYLOAD_COLUMN.to_owned(),
+            ]));
+
+            let id_filter = string_in_filter("id", ids);
+            let combined_filter = combine_filters([Some(id_filter), filter]);
+            if let Some(filter) = combined_filter {
+                query = query.only_if(filter);
+            }
+
+            let stream: SendableRecordBatchStream = query.execute().await?;
+            let batches: Vec<RecordBatch> = stream.try_collect().await?;
+            Ok::<Vec<RecordBatch>, lancedb::Error>(batches)
+        })?;
+
+        let mut records = HashMap::new();
+        for batch in batches {
+            let Some(ids) = batch
+                .column_by_name("id")
+                .and_then(|column| column.as_any().downcast_ref::<StringArray>())
+            else {
+                return Err(LanceDbError::InvalidData {
+                    field: "id",
+                    details: "expected Utf8 id column".to_owned(),
+                });
+            };
+            let Some(payloads) = batch
+                .column_by_name(PAYLOAD_COLUMN)
+                .and_then(|column| column.as_any().downcast_ref::<StringArray>())
+            else {
+                return Err(LanceDbError::InvalidData {
+                    field: PAYLOAD_COLUMN,
+                    details: "expected Utf8 payload column".to_owned(),
+                });
+            };
+
+            for index in 0..payloads.len() {
+                if ids.is_null(index) {
+                    return Err(LanceDbError::InvalidData {
+                        field: "id",
+                        details: "id column contained null".to_owned(),
+                    });
+                }
+                if payloads.is_null(index) {
+                    return Err(LanceDbError::InvalidData {
+                        field: PAYLOAD_COLUMN,
+                        details: "payload column contained null".to_owned(),
+                    });
+                }
+
+                let id = ids.value(index).to_owned();
+                let record = serde_json::from_str::<MemoryRecord>(payloads.value(index))?;
+                records.insert(id, record);
+            }
+        }
+
+        Ok(records)
+    }
+
+    fn query_embedded_memories_from_memories(
+        &self,
+        table: &Table,
+        filter: Option<String>,
+    ) -> Result<Vec<(MemoryRecord, Vec<f32>)>, LanceDbError> {
+        let batches = self.block_on(async {
+            let mut query = table.query().select(Select::Columns(vec![
+                PAYLOAD_COLUMN.to_owned(),
+                "embedding".to_owned(),
+            ]));
+
+            if let Some(filter) = filter {
+                query = query.only_if(filter);
+            }
+
+            let stream: SendableRecordBatchStream = query.execute().await?;
+            let batches: Vec<RecordBatch> = stream.try_collect().await?;
+            Ok::<Vec<RecordBatch>, lancedb::Error>(batches)
+        })?;
+
+        let mut records = Vec::new();
+        for batch in batches {
+            let Some(payloads) = batch
+                .column_by_name(PAYLOAD_COLUMN)
+                .and_then(|column| column.as_any().downcast_ref::<StringArray>())
+            else {
+                return Err(LanceDbError::InvalidData {
+                    field: PAYLOAD_COLUMN,
+                    details: "expected Utf8 payload column".to_owned(),
+                });
+            };
+            let Some(embeddings) = batch
+                .column_by_name("embedding")
+                .and_then(|column| column.as_any().downcast_ref::<ListArray>())
+            else {
+                return Err(LanceDbError::InvalidData {
+                    field: "embedding",
+                    details: "expected List<Float32> embedding column".to_owned(),
+                });
+            };
+
+            for index in 0..payloads.len() {
+                if payloads.is_null(index) {
+                    return Err(LanceDbError::InvalidData {
+                        field: PAYLOAD_COLUMN,
+                        details: "payload column contained null".to_owned(),
+                    });
+                }
+                if embeddings.is_null(index) {
+                    continue;
+                }
+
+                let record = serde_json::from_str::<MemoryRecord>(payloads.value(index))?;
+                let values = embeddings
+                    .value(index)
+                    .as_any()
+                    .downcast_ref::<Float32Array>()
+                    .ok_or(LanceDbError::InvalidData {
+                        field: "embedding",
+                        details: "embedding values must be Float32".to_owned(),
+                    })?
+                    .values()
+                    .to_vec();
+                records.push((record, values));
+            }
+        }
+
+        Ok(records)
+    }
+
+    fn query_embedded_memories_from_fixed_size_table(
+        &self,
+        filter: Option<String>,
+    ) -> Result<Vec<(MemoryRecord, Vec<f32>)>, LanceDbError> {
+        let Some(table) = self.memory_embeddings.as_ref() else {
+            return Ok(Vec::new());
+        };
+
+        let batches = self.block_on(async {
+            let stream: SendableRecordBatchStream = table
+                .query()
+                .select(Select::Columns(vec![
+                    "memory_id".to_owned(),
+                    "embedding".to_owned(),
+                ]))
+                .execute()
+                .await?;
+            let batches: Vec<RecordBatch> = stream.try_collect().await?;
+            Ok::<Vec<RecordBatch>, lancedb::Error>(batches)
+        })?;
+
+        let mut embeddings = Vec::new();
+        let mut memory_ids = Vec::new();
+        for batch in batches {
+            let Some(ids) = batch
+                .column_by_name("memory_id")
+                .and_then(|column| column.as_any().downcast_ref::<StringArray>())
+            else {
+                return Err(LanceDbError::InvalidData {
+                    field: "memory_id",
+                    details: "expected Utf8 memory_id column".to_owned(),
+                });
+            };
+            let Some(embeddings_array) = batch
+                .column_by_name("embedding")
+                .and_then(|column| column.as_any().downcast_ref::<FixedSizeListArray>())
+            else {
+                return Err(LanceDbError::InvalidData {
+                    field: "embedding",
+                    details: "expected FixedSizeList<Float32> embedding column".to_owned(),
+                });
+            };
+
+            for index in 0..ids.len() {
+                if ids.is_null(index) {
+                    return Err(LanceDbError::InvalidData {
+                        field: "memory_id",
+                        details: "memory_id column contained null".to_owned(),
+                    });
+                }
+                if embeddings_array.is_null(index) {
+                    continue;
+                }
+
+                let id = ids.value(index).to_owned();
+                let values = embeddings_array
+                    .value(index)
+                    .as_any()
+                    .downcast_ref::<Float32Array>()
+                    .ok_or(LanceDbError::InvalidData {
+                        field: "embedding",
+                        details: "embedding values must be Float32".to_owned(),
+                    })?
+                    .values()
+                    .to_vec();
+                memory_ids.push(id.clone());
+                embeddings.push((id, values));
+            }
+        }
+
+        let records_by_id = self.query_memory_records_by_ids(&memory_ids, filter)?;
+        Ok(embeddings
+            .into_iter()
+            .filter_map(|(id, embedding)| {
+                records_by_id
+                    .get(&id)
+                    .cloned()
+                    .map(|record| (record, embedding))
+            })
+            .collect())
+    }
+
+    fn query_embedded_memories(
+        &self,
+        filter: Option<String>,
+    ) -> Result<Vec<(MemoryRecord, Vec<f32>)>, LanceDbError> {
+        if self.supports_indexable_embedding_storage() {
+            return self.query_embedded_memories_from_fixed_size_table(filter);
+        }
+
+        self.query_embedded_memories_from_memories(&self.memories, filter)
+    }
+
+    fn lexical_candidates(
+        &self,
+        filter: Option<String>,
+        limit: usize,
+        text: Option<&str>,
+    ) -> Result<Vec<MemoryRecord>, LanceDbError> {
+        let payloads = self.query_payloads(
+            &self.memories,
+            filter,
+            Some(limit),
+            text.map(ToOwned::to_owned),
+        )?;
+        decode_memory_records(payloads)
+    }
+
+    fn semantic_candidates(
+        &self,
+        filter: Option<String>,
+        text: Option<&str>,
+    ) -> Result<Vec<SemanticCandidate>, LanceDbError> {
+        let Some(query_embedding) = self.semantic_query_embedding(text)? else {
+            return Ok(Vec::new());
+        };
+
+        let mut candidates = self
+            .query_embedded_memories(filter)?
+            .into_iter()
+            .filter_map(|(record, embedding)| {
+                cosine_similarity(&query_embedding, &embedding)
+                    .map(|score| SemanticCandidate { record, score })
+            })
+            .collect::<Vec<_>>();
+        candidates.sort_by(semantic_candidate_cmp);
+        Ok(candidates)
+    }
+
+    fn require_semantic_capability(&self) -> Result<(), LanceDbError> {
+        if self.supports_semantic_retrieval() {
+            Ok(())
+        } else {
+            Err(LanceDbError::Core(CoreError::CapabilityUnavailable {
+                capability: "semantic_search",
+            }))
+        }
     }
 
     fn count_memories(&self, filter: Option<String>) -> Result<usize, LanceDbError> {
@@ -706,7 +1996,27 @@ impl LanceDbBackend {
         table: &Table,
         record: &MemoryRecord,
     ) -> Result<(), LanceDbError> {
-        self.block_on_backend(insert_memory_record_async(table, record))
+        let embedding = if self.can_embed_on_write() {
+            self.embedding_for_record(record)?
+        } else {
+            None
+        };
+        self.block_on_backend(insert_memory_record_async(
+            table,
+            record,
+            self.schema_version,
+            embedding.as_ref(),
+        ))?;
+
+        if let Some(embedding) = embedding.as_ref() {
+            let is_main_memories_table =
+                self.table_uri(table)? == self.table_uri(&self.memories)?;
+            if is_main_memories_table {
+                self.upsert_fixed_size_memory_embedding(record.id(), embedding)?;
+            }
+        }
+
+        Ok(())
     }
 
     fn branch_record_from_contents(
@@ -877,7 +2187,8 @@ impl LanceDbBackend {
                         continue;
                     }
 
-                    insert_memory_record_async(branch_table, &record).await?;
+                    insert_memory_record_async(branch_table, &record, self.schema_version, None)
+                        .await?;
                     staged_records += 1;
                 }
             }
@@ -977,7 +2288,7 @@ impl StorageBackend for LanceDbBackend {
     type Error = LanceDbError;
 
     fn capabilities(&self) -> BackendCapabilities {
-        BackendCapabilities::new([
+        let mut capabilities = vec![
             BackendCapability::Remember,
             BackendCapability::Pinning,
             BackendCapability::Search,
@@ -990,7 +2301,13 @@ impl StorageBackend for LanceDbBackend {
             BackendCapability::ImportStaging,
             BackendCapability::ShallowClone,
             BackendCapability::DeepClone,
-        ])
+        ];
+        if self.supports_semantic_retrieval() {
+            capabilities.push(BackendCapability::SemanticSearch);
+            capabilities.push(BackendCapability::HybridSearch);
+        }
+
+        BackendCapabilities::new(capabilities)
     }
 }
 
@@ -1052,6 +2369,9 @@ impl PinningBackend for LanceDbBackend {
 
 impl RecallBackend for LanceDbBackend {
     fn recall(&self, query: &RecallQuery) -> Result<RecallResult, Self::Error> {
+        if query.retrieval_mode() == RetrievalMode::SemanticOnly && query.text().is_some() {
+            self.require_semantic_capability()?;
+        }
         let limit = usize::from(query.limit().value());
         let pinned_limit = limit.min(PINNED_CONTEXT_HARD_CAP);
         let mut remaining = limit;
@@ -1124,19 +2444,42 @@ impl RecallBackend for LanceDbBackend {
     }
 
     fn search(&self, query: &SearchQuery) -> Result<Vec<MemoryRecord>, Self::Error> {
-        let payloads = self.query_payloads(
-            &self.memories,
-            query
-                .scope()
-                .map(|scope| string_filter("scope_id", scope.as_str())),
-            Some(usize::from(query.limit().value())),
-            Some(query.text().to_owned()),
-        )?;
+        let scope_filter = query
+            .scope()
+            .map(|scope| string_filter("scope_id", scope.as_str()));
+        let limit = usize::from(query.limit().value());
 
-        payloads
-            .into_iter()
-            .map(|payload| serde_json::from_str::<MemoryRecord>(&payload).map_err(Into::into))
-            .collect()
+        match query.retrieval_mode() {
+            RetrievalMode::LexicalOnly => {
+                self.lexical_candidates(scope_filter, limit, Some(query.text()))
+            }
+            RetrievalMode::SemanticOnly => {
+                self.require_semantic_capability()?;
+                Ok(self
+                    .semantic_candidates(scope_filter, Some(query.text()))?
+                    .into_iter()
+                    .take(limit)
+                    .map(|candidate| candidate.record)
+                    .collect())
+            }
+            RetrievalMode::Hybrid => {
+                if !self.supports_semantic_retrieval() {
+                    return self.lexical_candidates(scope_filter, limit, Some(query.text()));
+                }
+
+                let lexical = self.lexical_candidates(
+                    scope_filter.clone(),
+                    recall_fetch_limit(limit),
+                    Some(query.text()),
+                )?;
+                let semantic = self.semantic_candidates(scope_filter, Some(query.text()))?;
+                Ok(merge_ranked_candidates(lexical, semantic)
+                    .into_iter()
+                    .take(limit)
+                    .map(|candidate| candidate.record)
+                    .collect())
+            }
+        }
     }
 }
 
@@ -1460,20 +2803,82 @@ impl LanceDbBackend {
             return Ok(Vec::new());
         }
 
-        let payloads = self.query_payloads(
-            &self.memories,
-            filter,
-            Some(recall_fetch_limit(limit)),
-            query.text().map(ToOwned::to_owned),
-        )?;
-        let mut records = decode_memory_records(payloads)?;
-        sort_recall_records(&mut records);
-        let explain_context = RecallExplainContext::from_records(&records);
+        let ranked = match query.retrieval_mode() {
+            RetrievalMode::LexicalOnly => {
+                let mut ranked = self
+                    .lexical_candidates(filter, recall_fetch_limit(limit), query.text())?
+                    .into_iter()
+                    .enumerate()
+                    .map(|(index, record)| RankedMemoryRecord {
+                        record,
+                        lexical_rank: query.text().map(|_| index + 1),
+                        semantic_rank: None,
+                        semantic_score: None,
+                    })
+                    .collect::<Vec<_>>();
+                ranked.sort_by(recall_ranked_candidate_cmp);
+                ranked
+            }
+            RetrievalMode::SemanticOnly => {
+                if query.text().is_some() {
+                    self.require_semantic_capability()?;
+                }
+                let mut ranked = self
+                    .semantic_candidates(filter, query.text())?
+                    .into_iter()
+                    .enumerate()
+                    .map(|(index, candidate)| RankedMemoryRecord {
+                        record: candidate.record,
+                        lexical_rank: None,
+                        semantic_rank: Some(index + 1),
+                        semantic_score: Some(candidate.score),
+                    })
+                    .collect::<Vec<_>>();
+                ranked.sort_by(recall_ranked_candidate_cmp);
+                ranked
+            }
+            RetrievalMode::Hybrid => {
+                let mut ranked = if !self.supports_semantic_retrieval() || query.text().is_none() {
+                    self.lexical_candidates(filter, recall_fetch_limit(limit), query.text())?
+                        .into_iter()
+                        .enumerate()
+                        .map(|(index, record)| RankedMemoryRecord {
+                            record,
+                            lexical_rank: query.text().map(|_| index + 1),
+                            semantic_rank: None,
+                            semantic_score: None,
+                        })
+                        .collect::<Vec<_>>()
+                } else {
+                    let lexical = self.lexical_candidates(
+                        filter.clone(),
+                        recall_fetch_limit(limit),
+                        query.text(),
+                    )?;
+                    let semantic = self.semantic_candidates(filter, query.text())?;
+                    merge_ranked_candidates(lexical, semantic)
+                };
+                ranked.sort_by(recall_ranked_candidate_cmp);
+                ranked
+            }
+        };
+        let explain_context = RecallExplainContext::from_records(
+            &ranked
+                .iter()
+                .map(|candidate| candidate.record.clone())
+                .collect::<Vec<_>>(),
+        );
 
-        Ok(records
+        Ok(ranked
             .into_iter()
             .take(limit)
-            .map(|record| recall_entry(record, layer, query, &explain_context))
+            .map(|candidate| {
+                let signals = MatchSignals {
+                    lexical: candidate.lexical_rank.is_some() && query.text().is_some(),
+                    semantic: candidate.semantic_rank.is_some() && query.text().is_some(),
+                };
+                recall_entry(candidate.record, layer, query, &explain_context, signals)
+            })
             .collect())
     }
 
@@ -1533,7 +2938,51 @@ impl StatsBackend for LanceDbBackend {
     }
 }
 
-fn memories_schema() -> Arc<Schema> {
+fn memories_schema(schema_version: u64) -> Arc<Schema> {
+    if schema_version <= LEGACY_SCHEMA_VERSION {
+        return Arc::new(Schema::new(vec![
+            Field::new("id", DataType::Utf8, false),
+            Field::new("scope_id", DataType::Utf8, false),
+            Field::new("kind", DataType::Utf8, false),
+            Field::new("title", DataType::Utf8, false),
+            Field::new("summary", DataType::Utf8, false),
+            Field::new("detail", DataType::Utf8, false),
+            Field::new("fts_text", DataType::Utf8, false),
+            Field::new("importance", DataType::UInt32, false),
+            Field::new("confidence", DataType::UInt32, false),
+            Field::new("created_at_secs", DataType::UInt64, false),
+            Field::new("created_at_nanos", DataType::UInt32, false),
+            Field::new("updated_at_secs", DataType::UInt64, false),
+            Field::new("updated_at_nanos", DataType::UInt32, false),
+            Field::new("pinned", DataType::Boolean, false),
+            Field::new(PAYLOAD_COLUMN, DataType::Utf8, false),
+        ]));
+    }
+
+    if schema_version <= VECTOR_CONFIG_SCHEMA_VERSION {
+        return Arc::new(Schema::new(vec![
+            Field::new("id", DataType::Utf8, false),
+            Field::new("scope_id", DataType::Utf8, false),
+            Field::new("kind", DataType::Utf8, false),
+            Field::new("title", DataType::Utf8, false),
+            Field::new("summary", DataType::Utf8, false),
+            Field::new("detail", DataType::Utf8, false),
+            Field::new("fts_text", DataType::Utf8, false),
+            Field::new("importance", DataType::UInt32, false),
+            Field::new("confidence", DataType::UInt32, false),
+            Field::new("created_at_secs", DataType::UInt64, false),
+            Field::new("created_at_nanos", DataType::UInt32, false),
+            Field::new("updated_at_secs", DataType::UInt64, false),
+            Field::new("updated_at_nanos", DataType::UInt32, false),
+            Field::new("embedding_model", DataType::Utf8, true),
+            Field::new("embedding_dimensions", DataType::UInt32, true),
+            Field::new("embedding_updated_at_secs", DataType::UInt64, true),
+            Field::new("embedding_updated_at_nanos", DataType::UInt32, true),
+            Field::new("pinned", DataType::Boolean, false),
+            Field::new(PAYLOAD_COLUMN, DataType::Utf8, false),
+        ]));
+    }
+
     Arc::new(Schema::new(vec![
         Field::new("id", DataType::Utf8, false),
         Field::new("scope_id", DataType::Utf8, false),
@@ -1548,6 +2997,15 @@ fn memories_schema() -> Arc<Schema> {
         Field::new("created_at_nanos", DataType::UInt32, false),
         Field::new("updated_at_secs", DataType::UInt64, false),
         Field::new("updated_at_nanos", DataType::UInt32, false),
+        Field::new("embedding_model", DataType::Utf8, true),
+        Field::new("embedding_dimensions", DataType::UInt32, true),
+        Field::new("embedding_updated_at_secs", DataType::UInt64, true),
+        Field::new("embedding_updated_at_nanos", DataType::UInt32, true),
+        Field::new(
+            "embedding",
+            DataType::List(Arc::new(Field::new_list_field(DataType::Float32, true))),
+            true,
+        ),
         Field::new("pinned", DataType::Boolean, false),
         Field::new(PAYLOAD_COLUMN, DataType::Utf8, false),
     ]))
@@ -1571,8 +3029,77 @@ fn schema_metadata_schema() -> Arc<Schema> {
     )]))
 }
 
+fn vector_config_schema() -> Arc<Schema> {
+    Arc::new(Schema::new(vec![
+        Field::new("vectors_enabled", DataType::Boolean, false),
+        Field::new("auto_embed_on_write", DataType::Boolean, false),
+        Field::new("embedding_model", DataType::Utf8, true),
+        Field::new("embedding_dimensions", DataType::UInt32, true),
+    ]))
+}
+
+fn memory_embeddings_schema(dimensions: u32) -> Result<Arc<Schema>, LanceDbError> {
+    if dimensions == 0 {
+        return Err(LanceDbError::InvalidVectorSettings {
+            details: "memory_embeddings schema requires a non-zero embedding dimension".to_owned(),
+        });
+    }
+
+    let dimension_length =
+        i32::try_from(dimensions).map_err(|_| LanceDbError::InvalidVectorSettings {
+            details: format!("embedding dimension `{dimensions}` exceeds supported Arrow size"),
+        })?;
+
+    Ok(Arc::new(Schema::new(vec![
+        Field::new("memory_id", DataType::Utf8, false),
+        Field::new("embedding_model", DataType::Utf8, false),
+        Field::new("embedding_updated_at_secs", DataType::UInt64, false),
+        Field::new("embedding_updated_at_nanos", DataType::UInt32, false),
+        Field::new(
+            "embedding",
+            DataType::FixedSizeList(
+                Arc::new(Field::new_list_field(DataType::Float32, true)),
+                dimension_length,
+            ),
+            false,
+        ),
+    ])))
+}
+
+fn memory_embedding_batch(
+    id: &MemoryId,
+    embedding: &PersistedEmbedding,
+) -> Result<(Arc<Schema>, RecordBatch), LanceDbError> {
+    let (updated_secs, updated_nanos) =
+        system_time_to_parts(embedding.updated_at, "embedding_updated_at")?;
+    let schema = memory_embeddings_schema(embedding.dimensions)?;
+    let batch = RecordBatch::try_new(
+        schema.clone(),
+        vec![
+            Arc::new(StringArray::from(vec![Some(id.as_str())])) as Arc<dyn Array>,
+            Arc::new(StringArray::from(vec![Some(embedding.model.as_str())])) as Arc<dyn Array>,
+            Arc::new(UInt64Array::from(vec![updated_secs])) as Arc<dyn Array>,
+            Arc::new(UInt32Array::from(vec![updated_nanos])) as Arc<dyn Array>,
+            Arc::new(fixed_size_embedding_array(
+                embedding.values.as_slice(),
+                embedding.dimensions,
+            )) as Arc<dyn Array>,
+        ],
+    )?;
+    Ok((schema, batch))
+}
+
 fn string_filter(column: &str, value: &str) -> String {
     format!("{column} = '{}'", sql_escape(value))
+}
+
+fn string_in_filter(column: &str, values: &[String]) -> String {
+    let values = values
+        .iter()
+        .map(|value| sql_string_literal(value))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("{column} IN ({values})")
 }
 
 fn combine_filters(filters: impl IntoIterator<Item = Option<String>>) -> Option<String> {
@@ -1607,39 +3134,67 @@ async fn table_contains_memory_id_async(
     Ok(!batches.is_empty())
 }
 
-fn memory_record_batch(record: &MemoryRecord) -> Result<(Arc<Schema>, RecordBatch), LanceDbError> {
+fn memory_record_batch(
+    record: &MemoryRecord,
+    schema_version: u64,
+    embedding: Option<&PersistedEmbedding>,
+) -> Result<(Arc<Schema>, RecordBatch), LanceDbError> {
     let payload_json = serde_json::to_string(record)?;
     let (created_secs, created_nanos) =
         system_time_to_parts(record.created_at().value(), "created_at")?;
     let (updated_secs, updated_nanos) =
         system_time_to_parts(record.updated_at().value(), "updated_at")?;
-    let schema = memories_schema();
-    let batch = RecordBatch::try_new(
-        schema.clone(),
-        vec![
-            Arc::new(StringArray::from(vec![Some(record.id().as_str())])),
-            Arc::new(StringArray::from(vec![Some(record.scope_id().as_str())])),
-            Arc::new(StringArray::from(vec![Some(memory_kind_name(
-                record.kind(),
-            ))])),
-            Arc::new(StringArray::from(vec![Some(record.title())])),
-            Arc::new(StringArray::from(vec![Some(record.summary())])),
-            Arc::new(StringArray::from(vec![Some(record.detail())])),
-            Arc::new(StringArray::from(vec![Some(record.fts_text())])),
-            Arc::new(UInt32Array::from(vec![u32::from(
-                record.importance().value(),
-            )])),
-            Arc::new(UInt32Array::from(vec![u32::from(
-                record.confidence().value(),
-            )])),
-            Arc::new(UInt64Array::from(vec![created_secs])),
-            Arc::new(UInt32Array::from(vec![created_nanos])),
-            Arc::new(UInt64Array::from(vec![updated_secs])),
-            Arc::new(UInt32Array::from(vec![updated_nanos])),
-            Arc::new(BooleanArray::from(vec![record.pin_state().is_pinned()])),
-            Arc::new(StringArray::from(vec![Some(payload_json.as_str())])),
-        ],
-    )?;
+    let embedding_parts = embedding
+        .map(|value| system_time_to_parts(value.updated_at, "embedding_updated_at"))
+        .transpose()?;
+    let schema = memories_schema(schema_version);
+    let mut columns: Vec<Arc<dyn Array>> = vec![
+        Arc::new(StringArray::from(vec![Some(record.id().as_str())])),
+        Arc::new(StringArray::from(vec![Some(record.scope_id().as_str())])),
+        Arc::new(StringArray::from(vec![Some(memory_kind_name(
+            record.kind(),
+        ))])),
+        Arc::new(StringArray::from(vec![Some(record.title())])),
+        Arc::new(StringArray::from(vec![Some(record.summary())])),
+        Arc::new(StringArray::from(vec![Some(record.detail())])),
+        Arc::new(StringArray::from(vec![Some(record.fts_text())])),
+        Arc::new(UInt32Array::from(vec![u32::from(
+            record.importance().value(),
+        )])),
+        Arc::new(UInt32Array::from(vec![u32::from(
+            record.confidence().value(),
+        )])),
+        Arc::new(UInt64Array::from(vec![created_secs])),
+        Arc::new(UInt32Array::from(vec![created_nanos])),
+        Arc::new(UInt64Array::from(vec![updated_secs])),
+        Arc::new(UInt32Array::from(vec![updated_nanos])),
+    ];
+    if schema_version > LEGACY_SCHEMA_VERSION {
+        columns.extend([
+            Arc::new(StringArray::from(vec![
+                embedding.map(|value| value.model.as_str()),
+            ])) as Arc<dyn Array>,
+            Arc::new(UInt32Array::from(vec![
+                embedding.map(|value| value.dimensions),
+            ])) as Arc<dyn Array>,
+            Arc::new(UInt64Array::from(vec![
+                embedding_parts.map(|(secs, _)| secs),
+            ])) as Arc<dyn Array>,
+            Arc::new(UInt32Array::from(vec![
+                embedding_parts.map(|(_, nanos)| nanos),
+            ])) as Arc<dyn Array>,
+        ]);
+    }
+    if schema_version > VECTOR_CONFIG_SCHEMA_VERSION {
+        columns.push(Arc::new(embedding_list_array(
+            embedding.map(|value| value.values.as_slice()),
+        )) as Arc<dyn Array>);
+    }
+    columns.extend([
+        Arc::new(BooleanArray::from(vec![record.pin_state().is_pinned()])) as Arc<dyn Array>,
+        Arc::new(StringArray::from(vec![Some(payload_json.as_str())])) as Arc<dyn Array>,
+    ]);
+    let batch = RecordBatch::try_new(schema.clone(), columns)?;
 
     Ok((schema, batch))
 }
@@ -1647,8 +3202,10 @@ fn memory_record_batch(record: &MemoryRecord) -> Result<(Arc<Schema>, RecordBatc
 async fn insert_memory_record_async(
     table: &Table,
     record: &MemoryRecord,
+    schema_version: u64,
+    embedding: Option<&PersistedEmbedding>,
 ) -> Result<(), LanceDbError> {
-    let (schema, batch) = memory_record_batch(record)?;
+    let (schema, batch) = memory_record_batch(record, schema_version, embedding)?;
     let reader = Box::new(RecordBatchIterator::new(
         vec![Ok(batch)].into_iter(),
         schema,
@@ -1667,12 +3224,45 @@ fn sort_memory_records(records: &mut [MemoryRecord]) {
     });
 }
 
-fn sort_recall_records(records: &mut [MemoryRecord]) {
-    records.sort_by(|left, right| {
-        recall_rank_key(right)
-            .cmp(&recall_rank_key(left))
-            .then_with(|| left.id().as_str().cmp(right.id().as_str()))
-    });
+fn merge_ranked_candidates(
+    lexical: Vec<MemoryRecord>,
+    semantic: Vec<SemanticCandidate>,
+) -> Vec<RankedMemoryRecord> {
+    let mut merged: HashMap<String, RankedMemoryRecord> = HashMap::new();
+
+    for (index, record) in lexical.into_iter().enumerate() {
+        merged.insert(
+            record.id().as_str().to_owned(),
+            RankedMemoryRecord {
+                record,
+                lexical_rank: Some(index + 1),
+                semantic_rank: None,
+                semantic_score: None,
+            },
+        );
+    }
+
+    for (index, candidate) in semantic.into_iter().enumerate() {
+        let key = candidate.record.id().as_str().to_owned();
+        if let Some(existing) = merged.get_mut(&key) {
+            existing.semantic_rank = Some(index + 1);
+            existing.semantic_score = Some(candidate.score);
+        } else {
+            merged.insert(
+                key,
+                RankedMemoryRecord {
+                    record: candidate.record,
+                    lexical_rank: None,
+                    semantic_rank: Some(index + 1),
+                    semantic_score: Some(candidate.score),
+                },
+            );
+        }
+    }
+
+    let mut ranked = merged.into_values().collect::<Vec<_>>();
+    ranked.sort_by(search_ranked_candidate_cmp);
+    ranked
 }
 
 fn recall_rank_key(record: &MemoryRecord) -> (u8, u8, u8, SystemTime) {
@@ -1682,6 +3272,106 @@ fn recall_rank_key(record: &MemoryRecord) -> (u8, u8, u8, SystemTime) {
         record.importance().value(),
         record.updated_at().value(),
     )
+}
+
+fn embedding_list_array(values: Option<&[f32]>) -> ListArray {
+    ListArray::from_iter_primitive::<Float32Type, _, _>(vec![values.map(|items| {
+        items
+            .iter()
+            .copied()
+            .map(Some)
+            .collect::<Vec<Option<f32>>>()
+    })])
+}
+
+fn fixed_size_embedding_array(values: &[f32], dimensions: u32) -> FixedSizeListArray {
+    FixedSizeListArray::from_iter_primitive::<Float32Type, _, _>(
+        vec![Some(
+            values
+                .iter()
+                .copied()
+                .map(Some)
+                .collect::<Vec<Option<f32>>>(),
+        )],
+        dimensions as i32,
+    )
+}
+
+fn sql_float32_list_literal(values: &[f32]) -> String {
+    let values = values
+        .iter()
+        .map(|value| format!("{value:.9}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("[{values}]")
+}
+
+fn cosine_similarity(left: &[f32], right: &[f32]) -> Option<f32> {
+    if left.len() != right.len() || left.is_empty() {
+        return None;
+    }
+
+    let mut dot = 0.0_f32;
+    let mut left_norm = 0.0_f32;
+    let mut right_norm = 0.0_f32;
+    for (lhs, rhs) in left.iter().zip(right.iter()) {
+        dot += lhs * rhs;
+        left_norm += lhs * lhs;
+        right_norm += rhs * rhs;
+    }
+
+    let denom = left_norm.sqrt() * right_norm.sqrt();
+    (denom > 0.0).then_some(dot / denom)
+}
+
+fn reciprocal_rank(rank: Option<usize>) -> f32 {
+    rank.map_or(0.0, |value| 1.0 / (10.0 + value as f32))
+}
+
+fn semantic_candidate_cmp(left: &SemanticCandidate, right: &SemanticCandidate) -> Ordering {
+    right
+        .score
+        .total_cmp(&left.score)
+        .then_with(|| recall_rank_key(&right.record).cmp(&recall_rank_key(&left.record)))
+        .then_with(|| left.record.id().as_str().cmp(right.record.id().as_str()))
+}
+
+fn search_ranked_candidate_cmp(left: &RankedMemoryRecord, right: &RankedMemoryRecord) -> Ordering {
+    let left_score = reciprocal_rank(left.lexical_rank) + reciprocal_rank(left.semantic_rank);
+    let right_score = reciprocal_rank(right.lexical_rank) + reciprocal_rank(right.semantic_rank);
+
+    right_score
+        .total_cmp(&left_score)
+        .then_with(|| {
+            right
+                .semantic_score
+                .unwrap_or_default()
+                .total_cmp(&left.semantic_score.unwrap_or_default())
+        })
+        .then_with(|| {
+            right
+                .record
+                .updated_at()
+                .value()
+                .cmp(&left.record.updated_at().value())
+        })
+        .then_with(|| left.record.id().as_str().cmp(right.record.id().as_str()))
+}
+
+fn recall_ranked_candidate_cmp(left: &RankedMemoryRecord, right: &RankedMemoryRecord) -> Ordering {
+    let left_score = reciprocal_rank(left.lexical_rank) + reciprocal_rank(left.semantic_rank);
+    let right_score = reciprocal_rank(right.lexical_rank) + reciprocal_rank(right.semantic_rank);
+
+    right_score
+        .total_cmp(&left_score)
+        .then_with(|| {
+            right
+                .semantic_score
+                .unwrap_or_default()
+                .total_cmp(&left.semantic_score.unwrap_or_default())
+        })
+        .then_with(|| recall_rank_key(&right.record).cmp(&recall_rank_key(&left.record)))
+        .then_with(|| left.record.id().as_str().cmp(right.record.id().as_str()))
 }
 
 struct RecallExplainContext {
@@ -1715,6 +3405,7 @@ fn recall_entry(
     layer: RecallLayer,
     query: &RecallQuery,
     explain_context: &RecallExplainContext,
+    signals: MatchSignals,
 ) -> RecallEntry {
     let mut reasons = Vec::new();
     if record.pin_state().is_pinned() {
@@ -1723,8 +3414,12 @@ fn recall_entry(
     if query.scope().is_some() {
         reasons.push(RecallReason::ScopeFilter);
     }
-    if query.text().is_some() {
+    if signals.lexical && signals.semantic {
+        reasons.push(RecallReason::HybridMatch);
+    } else if signals.lexical {
         reasons.push(RecallReason::TextMatch);
+    } else if signals.semantic {
+        reasons.push(RecallReason::SemanticMatch);
     }
     if matches!(record.kind(), MemoryKind::Summary) {
         reasons.push(RecallReason::SummaryKind);
@@ -1855,13 +3550,14 @@ fn memory_kind_name(kind: MemoryKind) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
+    use std::{collections::BTreeMap, path::Path, sync::Arc};
 
+    use arrow_array::Float32Array;
     use mnemix_core::{
         BranchName, BranchRequest, CheckpointName, CheckpointSelector, CleanupMode, CloneKind,
         Confidence, DisclosureDepth, ImportStageRequest, Importance, OptimizeRequest,
         PreOperationCheckpointPolicy, QueryLimit, RecallQuery, RestoreRequest, RetentionPolicy,
-        ScopeId, SearchQuery, StatsQuery, TagName,
+        RetrievalMode, ScopeId, SearchQuery, StatsQuery, TagName,
         traits::{
             AdvancedStorageBackend, CheckpointBackend, HistoryBackend, MemoryRepository,
             OptimizeBackend, PinningBackend, RecallBackend, RestoreBackend, StatsBackend,
@@ -1883,6 +3579,52 @@ mod tests {
         importance: u8,
         pin_reason: Option<&'a str>,
         updated_at_secs: u64,
+    }
+
+    struct TestEmbeddingProvider {
+        model_id: &'static str,
+        dimensions: u32,
+    }
+
+    impl EmbeddingProvider for TestEmbeddingProvider {
+        fn model_id(&self) -> &str {
+            self.model_id
+        }
+
+        fn dimensions(&self) -> u32 {
+            self.dimensions
+        }
+
+        fn embed(&self, text: &str) -> Result<Vec<f32>, EmbeddingProviderError> {
+            Ok(vec![text.len() as f32; self.dimensions as usize])
+        }
+    }
+
+    struct SemanticTestEmbeddingProvider;
+
+    impl EmbeddingProvider for SemanticTestEmbeddingProvider {
+        fn model_id(&self) -> &str {
+            "semantic-test"
+        }
+
+        fn dimensions(&self) -> u32 {
+            3
+        }
+
+        fn embed(&self, text: &str) -> Result<Vec<f32>, EmbeddingProviderError> {
+            let lowered = text.to_ascii_lowercase();
+            if lowered.contains("format")
+                || lowered.contains("style")
+                || lowered.contains("handbook")
+                || lowered.contains("output")
+            {
+                Ok(vec![1.0, 0.0, 0.0])
+            } else if lowered.contains("checkpoint") || lowered.contains("restore") {
+                Ok(vec![0.0, 1.0, 0.0])
+            } else {
+                Ok(vec![0.0, 0.0, 1.0])
+            }
+        }
     }
 
     fn build_memory(id: &str, scope: &str, title: &str, detail: &str) -> MemoryRecord {
@@ -1937,6 +3679,254 @@ mod tests {
         (temp_dir, backend)
     }
 
+    fn embedding_snapshot(
+        backend: &LanceDbBackend,
+        id: &str,
+    ) -> (Option<String>, Option<u32>, Option<Vec<f32>>) {
+        let batches = backend
+            .block_on(async {
+                let stream: SendableRecordBatchStream = backend
+                    .memories
+                    .query()
+                    .select(Select::Columns(vec![
+                        "embedding_model".to_owned(),
+                        "embedding_dimensions".to_owned(),
+                        "embedding".to_owned(),
+                    ]))
+                    .only_if(string_filter("id", id))
+                    .limit(1)
+                    .execute()
+                    .await?;
+                let batches: Vec<RecordBatch> = stream.try_collect().await?;
+                Ok::<Vec<RecordBatch>, lancedb::Error>(batches)
+            })
+            .expect("embedding query should succeed");
+        let batch = batches.first().expect("embedding row should exist");
+
+        let model = batch
+            .column_by_name("embedding_model")
+            .and_then(|column| column.as_any().downcast_ref::<StringArray>())
+            .and_then(|column| (!column.is_null(0)).then(|| column.value(0).to_owned()));
+        let dimensions = batch
+            .column_by_name("embedding_dimensions")
+            .and_then(|column| column.as_any().downcast_ref::<UInt32Array>())
+            .and_then(|column| (!column.is_null(0)).then(|| column.value(0)));
+        let values = batch
+            .column_by_name("embedding")
+            .and_then(|column| column.as_any().downcast_ref::<ListArray>())
+            .and_then(|column| {
+                (!column.is_null(0)).then(|| {
+                    column
+                        .value(0)
+                        .as_any()
+                        .downcast_ref::<Float32Array>()
+                        .expect("embedding values should be Float32")
+                        .values()
+                        .to_vec()
+                })
+            });
+
+        (model, dimensions, values)
+    }
+
+    fn fixed_size_embedding_snapshot(
+        backend: &LanceDbBackend,
+        id: &str,
+    ) -> (Option<String>, Option<Vec<f32>>) {
+        let table = backend
+            .memory_embeddings
+            .as_ref()
+            .expect("memory_embeddings table should exist");
+        let batches = backend
+            .block_on(async {
+                let stream: SendableRecordBatchStream = table
+                    .query()
+                    .select(Select::Columns(vec![
+                        "embedding_model".to_owned(),
+                        "embedding".to_owned(),
+                    ]))
+                    .only_if(string_filter("memory_id", id))
+                    .limit(1)
+                    .execute()
+                    .await?;
+                let batches: Vec<RecordBatch> = stream.try_collect().await?;
+                Ok::<Vec<RecordBatch>, lancedb::Error>(batches)
+            })
+            .expect("fixed-size embedding query should succeed");
+        let batch = batches
+            .first()
+            .expect("fixed-size embedding row should exist");
+
+        let model = batch
+            .column_by_name("embedding_model")
+            .and_then(|column| column.as_any().downcast_ref::<StringArray>())
+            .and_then(|column| (!column.is_null(0)).then(|| column.value(0).to_owned()));
+        let values = batch
+            .column_by_name("embedding")
+            .and_then(|column| column.as_any().downcast_ref::<FixedSizeListArray>())
+            .map(|column| {
+                column
+                    .value(0)
+                    .as_any()
+                    .downcast_ref::<Float32Array>()
+                    .expect("fixed-size embedding values should be Float32")
+                    .values()
+                    .to_vec()
+            });
+
+        (model, values)
+    }
+
+    fn clear_list_embedding(backend: &LanceDbBackend, id: &str) {
+        backend
+            .block_on(
+                backend
+                    .memories
+                    .update()
+                    .only_if(string_filter("id", id))
+                    .column("embedding_model", "NULL")
+                    .column("embedding_dimensions", "NULL")
+                    .column("embedding_updated_at_secs", "NULL")
+                    .column("embedding_updated_at_nanos", "NULL")
+                    .column("embedding", "NULL")
+                    .execute(),
+            )
+            .expect("embedding columns should clear");
+    }
+
+    fn write_vector_settings(
+        backend: &LanceDbBackend,
+        settings: VectorSettings,
+    ) -> Result<(), LanceDbError> {
+        backend.write_vector_settings(&settings)
+    }
+
+    fn init_legacy_store(path: &Path) {
+        std::fs::create_dir_all(path).expect("legacy store path should be created");
+
+        let runtime = Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("runtime should build");
+        let uri = path.to_string_lossy().to_string();
+        let connection = runtime
+            .block_on(connect(&uri).execute())
+            .expect("legacy connection should open");
+
+        let memories = runtime
+            .block_on(
+                connection
+                    .create_empty_table(MEMORIES_TABLE, memories_schema(LEGACY_SCHEMA_VERSION))
+                    .execute(),
+            )
+            .expect("legacy memories table should create");
+        runtime
+            .block_on(
+                connection
+                    .create_empty_table(CHECKPOINTS_TABLE, checkpoints_schema())
+                    .execute(),
+            )
+            .expect("legacy checkpoints table should create");
+        let schema_metadata = runtime
+            .block_on(
+                connection
+                    .create_empty_table(SCHEMA_METADATA_TABLE, schema_metadata_schema())
+                    .execute(),
+            )
+            .expect("legacy schema metadata should create");
+
+        let schema = schema_metadata_schema();
+        let batch = RecordBatch::try_new(
+            schema.clone(),
+            vec![Arc::new(UInt64Array::from(vec![LEGACY_SCHEMA_VERSION]))],
+        )
+        .expect("legacy schema batch should build");
+        let reader = Box::new(RecordBatchIterator::new(
+            vec![Ok(batch)].into_iter(),
+            schema,
+        ));
+        runtime
+            .block_on(schema_metadata.add(reader).execute())
+            .expect("legacy schema version row should insert");
+
+        let memory = build_memory(
+            "memory:legacy",
+            "repo:mnemix",
+            "Legacy memory",
+            "Legacy stores should remain writable after vector scaffolding lands.",
+        );
+        let (schema, batch) = memory_record_batch(&memory, LEGACY_SCHEMA_VERSION, None)
+            .expect("legacy memory batch should build");
+        let reader = Box::new(RecordBatchIterator::new(
+            vec![Ok(batch)].into_iter(),
+            schema,
+        ));
+        runtime
+            .block_on(memories.add(reader).execute())
+            .expect("legacy memory should insert");
+    }
+
+    fn init_v3_store(path: &Path) {
+        std::fs::create_dir_all(path).expect("v3 store path should be created");
+
+        let runtime = Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("runtime should build");
+        let uri = path.to_string_lossy().to_string();
+        let connection = runtime
+            .block_on(connect(&uri).execute())
+            .expect("v3 connection should open");
+
+        runtime
+            .block_on(
+                connection
+                    .create_empty_table(
+                        MEMORIES_TABLE,
+                        memories_schema(PERSISTED_EMBEDDING_SCHEMA_VERSION),
+                    )
+                    .execute(),
+            )
+            .expect("v3 memories table should create");
+        runtime
+            .block_on(
+                connection
+                    .create_empty_table(CHECKPOINTS_TABLE, checkpoints_schema())
+                    .execute(),
+            )
+            .expect("v3 checkpoints table should create");
+        let schema_metadata = runtime
+            .block_on(
+                connection
+                    .create_empty_table(SCHEMA_METADATA_TABLE, schema_metadata_schema())
+                    .execute(),
+            )
+            .expect("v3 schema metadata should create");
+        runtime
+            .block_on(
+                connection
+                    .create_empty_table(VECTOR_CONFIG_TABLE, vector_config_schema())
+                    .execute(),
+            )
+            .expect("v3 vector config should create");
+
+        let schema = schema_metadata_schema();
+        let batch = RecordBatch::try_new(
+            schema.clone(),
+            vec![Arc::new(UInt64Array::from(vec![
+                PERSISTED_EMBEDDING_SCHEMA_VERSION,
+            ]))],
+        )
+        .expect("v3 schema batch should build");
+        let reader = Box::new(RecordBatchIterator::new(
+            vec![Ok(batch)].into_iter(),
+            schema,
+        ));
+        runtime
+            .block_on(schema_metadata.add(reader).execute())
+            .expect("v3 schema version row should insert");
+    }
+
     fn branch_table(backend: &LanceDbBackend, branch: &BranchName) -> Table {
         backend
             .open_branch_memories_table(branch)
@@ -1969,6 +3959,127 @@ mod tests {
     }
 
     #[test]
+    fn init_sets_default_vector_config() {
+        let (_temp_dir, backend) = new_backend();
+
+        assert_eq!(backend.vector_settings(), &VectorSettings::default());
+        assert!(!backend.has_embedding_provider());
+        assert!(!backend.can_embed_on_write());
+        let status = backend.vector_status().expect("vector status should load");
+        assert_eq!(status.total_memories(), 0);
+        assert_eq!(status.embedded_memories(), 0);
+        assert_eq!(status.embedding_coverage_percent(), 0);
+        assert!(!status.semantic_retrieval_available());
+        assert!(!status.vector_index().available());
+        assert!(!status.indexable_embedding_storage());
+    }
+
+    #[test]
+    fn enable_vectors_persists_settings_on_current_store() {
+        let (_temp_dir, mut backend) = new_backend();
+
+        let settings = backend
+            .enable_vectors(
+                &VectorEnableRequest::new("test-embedder", 3).expect("enable request should build"),
+            )
+            .expect("vector enablement should succeed");
+
+        assert!(settings.vectors_enabled());
+        assert_eq!(settings.embedding_model(), Some("test-embedder"));
+        assert_eq!(settings.embedding_dimensions(), Some(3));
+        assert_eq!(backend.vector_settings(), &settings);
+    }
+
+    #[test]
+    fn remember_with_auto_embed_persists_embedding_payload() {
+        let temp_dir = TempDir::new().expect("tempdir should be created");
+        let mut backend = LanceDbBackend::init_with_options(
+            temp_dir.path(),
+            LanceDbOpenOptions::new().embedding_provider(Arc::new(TestEmbeddingProvider {
+                model_id: "test-embedder",
+                dimensions: 3,
+            })),
+        )
+        .expect("backend should initialize");
+        backend
+            .enable_vectors(
+                &VectorEnableRequest::new("test-embedder", 3)
+                    .expect("enable request should build")
+                    .with_auto_embed_on_write(true),
+            )
+            .expect("vector enablement should succeed");
+
+        let memory = build_memory(
+            "memory:auto-embed",
+            "repo:mnemix",
+            "Auto embedded memory",
+            "Remember writes should persist embedding values when enabled.",
+        );
+        let expected_value = memory.fts_text().len() as f32;
+        backend
+            .remember(memory)
+            .expect("memory should store with embedding");
+
+        let (model, dimensions, embedding) = embedding_snapshot(&backend, "memory:auto-embed");
+        assert_eq!(model.as_deref(), Some("test-embedder"));
+        assert_eq!(dimensions, Some(3));
+        assert_eq!(embedding, Some(vec![expected_value; 3]));
+        let (fixed_model, fixed_embedding) =
+            fixed_size_embedding_snapshot(&backend, "memory:auto-embed");
+        assert_eq!(fixed_model.as_deref(), Some("test-embedder"));
+        assert_eq!(fixed_embedding, Some(vec![expected_value; 3]));
+        let status = backend.vector_status().expect("vector status should load");
+        assert_eq!(status.embedded_memories(), 1);
+        assert_eq!(status.total_memories(), 1);
+        assert_eq!(status.embedding_coverage_percent(), 100);
+    }
+
+    #[test]
+    fn vector_enabled_backend_advertises_semantic_capabilities() {
+        let temp_dir = TempDir::new().expect("tempdir should be created");
+        let mut backend = LanceDbBackend::init_with_options(
+            temp_dir.path(),
+            LanceDbOpenOptions::new().embedding_provider(Arc::new(TestEmbeddingProvider {
+                model_id: "test-embedder",
+                dimensions: 3,
+            })),
+        )
+        .expect("backend should initialize");
+        backend
+            .enable_vectors(
+                &VectorEnableRequest::new("test-embedder", 3).expect("enable request should build"),
+            )
+            .expect("vector enablement should succeed");
+
+        assert!(backend.capabilities().supports_semantic_search());
+        assert!(backend.capabilities().supports_hybrid_search());
+    }
+
+    #[test]
+    fn enable_vectors_on_v4_store_creates_indexable_embedding_table() {
+        let temp_dir = TempDir::new().expect("tempdir should be created");
+        let mut backend = LanceDbBackend::init(temp_dir.path()).expect("backend should initialize");
+
+        backend
+            .enable_vectors(
+                &VectorEnableRequest::new("test-embedder", 3).expect("enable request should build"),
+            )
+            .expect("vector enablement should succeed");
+
+        assert!(backend.memory_embeddings.is_some());
+        let status = backend.vector_status().expect("vector status should load");
+        assert!(status.persisted_embedding_storage());
+        assert!(status.indexable_embedding_storage());
+        assert!(
+            status
+                .vector_index()
+                .reason()
+                .expect("vector index reason")
+                .contains("no persisted embeddings yet")
+        );
+    }
+
+    #[test]
     fn backend_advertises_pinning_capability() {
         let (_temp_dir, backend) = new_backend();
 
@@ -1984,6 +4095,497 @@ mod tests {
         assert!(backend.capabilities().supports_import_staging());
         assert!(backend.capabilities().supports_shallow_clone());
         assert!(backend.capabilities().supports_deep_clone());
+    }
+
+    #[test]
+    fn open_legacy_store_preserves_schema_version_and_writes() {
+        let temp_dir = TempDir::new().expect("tempdir should be created");
+        init_legacy_store(temp_dir.path());
+
+        let mut backend = LanceDbBackend::open(temp_dir.path()).expect("backend should open");
+        assert_eq!(
+            backend.schema_version().expect("schema version"),
+            LEGACY_SCHEMA_VERSION
+        );
+        assert_eq!(backend.vector_settings(), &VectorSettings::default());
+
+        backend
+            .remember(build_memory(
+                "memory:new-on-legacy",
+                "repo:mnemix",
+                "Legacy write path",
+                "Legacy stores should continue using the v1 row shape.",
+            ))
+            .expect("legacy store should remain writable");
+
+        let legacy = backend
+            .get(&MemoryId::try_from("memory:legacy").expect("valid legacy id"))
+            .expect("legacy lookup should succeed");
+        let inserted = backend
+            .get(&MemoryId::try_from("memory:new-on-legacy").expect("valid inserted id"))
+            .expect("inserted lookup should succeed");
+        let results = backend
+            .search(
+                &SearchQuery::new(
+                    "write path",
+                    Some(ScopeId::try_from("repo:mnemix").expect("valid scope")),
+                    QueryLimit::new(10).expect("valid limit"),
+                )
+                .expect("search query should build"),
+            )
+            .expect("search should succeed");
+
+        assert!(legacy.is_some());
+        assert!(inserted.is_some());
+        assert_eq!(results.len(), 1);
+    }
+
+    #[test]
+    fn open_v3_store_reports_non_indexable_embedding_storage() {
+        let temp_dir = TempDir::new().expect("tempdir should be created");
+        init_v3_store(temp_dir.path());
+
+        let mut backend = LanceDbBackend::open(temp_dir.path()).expect("backend should open");
+        assert_eq!(
+            backend.schema_version().expect("schema version"),
+            PERSISTED_EMBEDDING_SCHEMA_VERSION
+        );
+        backend
+            .enable_vectors(
+                &VectorEnableRequest::new("test-embedder", 3).expect("enable request should build"),
+            )
+            .expect("vector enablement should succeed on v3 store");
+
+        assert!(backend.memory_embeddings.is_none());
+        let status = backend.vector_status().expect("vector status should load");
+        assert!(status.persisted_embedding_storage());
+        assert!(!status.indexable_embedding_storage());
+        assert!(
+            status
+                .vector_index()
+                .reason()
+                .expect("vector index reason")
+                .contains("schema-v3")
+        );
+    }
+
+    #[test]
+    fn enable_vectors_rejects_legacy_store() {
+        let temp_dir = TempDir::new().expect("tempdir should be created");
+        init_legacy_store(temp_dir.path());
+        let mut backend = LanceDbBackend::open(temp_dir.path()).expect("backend should open");
+
+        let result = backend.enable_vectors(
+            &VectorEnableRequest::new("test-embedder", 3).expect("enable request should build"),
+        );
+
+        assert!(matches!(
+            result,
+            Err(LanceDbError::InvalidVectorSettings { details })
+            if details.contains("schema version 3")
+        ));
+    }
+
+    #[test]
+    fn backfill_plan_counts_candidate_memories() {
+        let (_temp_dir, mut backend) = new_backend();
+        backend
+            .remember(build_memory(
+                "memory:backfill",
+                "repo:mnemix",
+                "Backfill candidate",
+                "Plan mode should count this memory.",
+            ))
+            .expect("memory should store");
+        backend
+            .enable_vectors(
+                &VectorEnableRequest::new("test-embedder", 3).expect("enable request should build"),
+            )
+            .expect("vector enablement should succeed");
+
+        let result = backend
+            .backfill_embeddings(&EmbeddingBackfillRequest::plan())
+            .expect("backfill plan should succeed");
+
+        assert!(!result.apply_writes());
+        assert_eq!(result.candidate_memories(), 1);
+        assert_eq!(result.updated_memories(), 0);
+    }
+
+    #[test]
+    fn backfill_apply_requires_embedding_provider() {
+        let (_temp_dir, mut backend) = new_backend();
+        backend
+            .enable_vectors(
+                &VectorEnableRequest::new("test-embedder", 3).expect("enable request should build"),
+            )
+            .expect("vector enablement should succeed");
+
+        let result = backend.backfill_embeddings(&EmbeddingBackfillRequest::apply());
+
+        assert!(matches!(
+            result,
+            Err(LanceDbError::Core(CoreError::CapabilityUnavailable {
+                capability: "embedding_provider"
+            }))
+        ));
+    }
+
+    #[test]
+    fn backfill_apply_persists_embeddings() {
+        let temp_dir = TempDir::new().expect("tempdir should be created");
+        let mut backend = LanceDbBackend::init_with_options(
+            temp_dir.path(),
+            LanceDbOpenOptions::new().embedding_provider(Arc::new(TestEmbeddingProvider {
+                model_id: "test-embedder",
+                dimensions: 3,
+            })),
+        )
+        .expect("backend should initialize");
+        let memory = build_memory(
+            "memory:backfill-apply",
+            "repo:mnemix",
+            "Backfill target",
+            "Apply mode should persist embeddings for existing rows.",
+        );
+        let expected_value = memory.fts_text().len() as f32;
+        backend
+            .remember(memory)
+            .expect("memory should store before enablement");
+        backend
+            .enable_vectors(
+                &VectorEnableRequest::new("test-embedder", 3).expect("enable request should build"),
+            )
+            .expect("vector enablement should succeed");
+
+        let result = backend
+            .backfill_embeddings(&EmbeddingBackfillRequest::apply())
+            .expect("backfill apply should succeed");
+
+        assert!(result.apply_writes());
+        assert_eq!(result.candidate_memories(), 1);
+        assert_eq!(result.updated_memories(), 1);
+
+        let (model, dimensions, embedding) = embedding_snapshot(&backend, "memory:backfill-apply");
+        assert_eq!(model.as_deref(), Some("test-embedder"));
+        assert_eq!(dimensions, Some(3));
+        assert_eq!(embedding, Some(vec![expected_value; 3]));
+        let (fixed_model, fixed_embedding) =
+            fixed_size_embedding_snapshot(&backend, "memory:backfill-apply");
+        assert_eq!(fixed_model.as_deref(), Some("test-embedder"));
+        assert_eq!(fixed_embedding, Some(vec![expected_value; 3]));
+    }
+
+    #[test]
+    fn vector_status_reports_partial_embedding_coverage() {
+        let temp_dir = TempDir::new().expect("tempdir should be created");
+        let mut backend = LanceDbBackend::init_with_options(
+            temp_dir.path(),
+            LanceDbOpenOptions::new().embedding_provider(Arc::new(TestEmbeddingProvider {
+                model_id: "test-embedder",
+                dimensions: 3,
+            })),
+        )
+        .expect("backend should initialize");
+        backend
+            .remember(build_memory(
+                "memory:plain-one",
+                "repo:mnemix",
+                "Plain memory",
+                "Stored before vectors are enabled.",
+            ))
+            .expect("plain memory should store");
+        backend
+            .enable_vectors(
+                &VectorEnableRequest::new("test-embedder", 3)
+                    .expect("enable request should build")
+                    .with_auto_embed_on_write(true),
+            )
+            .expect("vector enablement should succeed");
+        backend
+            .remember(build_memory(
+                "memory:embedded-two",
+                "repo:mnemix",
+                "Embedded memory",
+                "Stored after vectors are enabled.",
+            ))
+            .expect("embedded memory should store");
+
+        let status = backend.vector_status().expect("vector status should load");
+        assert_eq!(status.total_memories(), 2);
+        assert_eq!(status.embedded_memories(), 1);
+        assert_eq!(status.embedding_coverage_percent(), 50);
+        assert!(status.semantic_retrieval_available());
+        assert!(status.indexable_embedding_storage());
+        assert!(
+            status
+                .vector_index()
+                .reason()
+                .expect("vector index reason")
+                .contains("populated")
+        );
+    }
+
+    #[test]
+    fn semantic_only_search_returns_embedding_matches() {
+        let temp_dir = TempDir::new().expect("tempdir should be created");
+        let mut backend = LanceDbBackend::init_with_options(
+            temp_dir.path(),
+            LanceDbOpenOptions::new().embedding_provider(Arc::new(SemanticTestEmbeddingProvider)),
+        )
+        .expect("backend should initialize");
+        backend
+            .enable_vectors(
+                &VectorEnableRequest::new("semantic-test", 3)
+                    .expect("enable request should build")
+                    .with_auto_embed_on_write(true),
+            )
+            .expect("vector enablement should succeed");
+        backend
+            .remember(build_memory(
+                "memory:semantic-style",
+                "repo:mnemix",
+                "Formatting handbook",
+                "Formatting guidance for CLI output snapshots.",
+            ))
+            .expect("semantic candidate should store");
+        backend
+            .remember(build_memory(
+                "memory:semantic-restore",
+                "repo:mnemix",
+                "Restore guide",
+                "Checkpoint recovery workflow for snapshots.",
+            ))
+            .expect("non-matching candidate should store");
+
+        let results = backend
+            .search(
+                &SearchQuery::new_with_mode(
+                    "style guide",
+                    Some(ScopeId::try_from("repo:mnemix").expect("valid scope")),
+                    QueryLimit::new(5).expect("valid limit"),
+                    RetrievalMode::SemanticOnly,
+                )
+                .expect("search query should build"),
+            )
+            .expect("semantic search should succeed");
+
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].id().as_str(), "memory:semantic-style");
+    }
+
+    #[test]
+    fn semantic_only_search_uses_fixed_size_embeddings_on_v4_store() {
+        let temp_dir = TempDir::new().expect("tempdir should be created");
+        let mut backend = LanceDbBackend::init_with_options(
+            temp_dir.path(),
+            LanceDbOpenOptions::new().embedding_provider(Arc::new(SemanticTestEmbeddingProvider)),
+        )
+        .expect("backend should initialize");
+        backend
+            .enable_vectors(
+                &VectorEnableRequest::new("semantic-test", 3)
+                    .expect("enable request should build")
+                    .with_auto_embed_on_write(true),
+            )
+            .expect("vector enablement should succeed");
+        backend
+            .remember(build_memory(
+                "memory:semantic-v4",
+                "repo:mnemix",
+                "Formatting handbook",
+                "Formatting guidance for CLI output snapshots.",
+            ))
+            .expect("semantic candidate should store");
+
+        clear_list_embedding(&backend, "memory:semantic-v4");
+        let (model, dimensions, list_embedding) =
+            embedding_snapshot(&backend, "memory:semantic-v4");
+        assert_eq!(model, None);
+        assert_eq!(dimensions, None);
+        assert_eq!(list_embedding, None);
+        let (fixed_model, fixed_embedding) =
+            fixed_size_embedding_snapshot(&backend, "memory:semantic-v4");
+        assert_eq!(fixed_model.as_deref(), Some("semantic-test"));
+        assert_eq!(fixed_embedding, Some(vec![1.0, 0.0, 0.0]));
+
+        let results = backend
+            .search(
+                &SearchQuery::new_with_mode(
+                    "style guide",
+                    Some(ScopeId::try_from("repo:mnemix").expect("valid scope")),
+                    QueryLimit::new(5).expect("valid limit"),
+                    RetrievalMode::SemanticOnly,
+                )
+                .expect("search query should build"),
+            )
+            .expect("semantic search should succeed");
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].id().as_str(), "memory:semantic-v4");
+    }
+
+    #[test]
+    fn semantic_only_search_falls_back_to_v3_list_embeddings() {
+        let temp_dir = TempDir::new().expect("tempdir should be created");
+        init_v3_store(temp_dir.path());
+
+        let mut backend = LanceDbBackend::open_with_options(
+            temp_dir.path(),
+            LanceDbOpenOptions::new().embedding_provider(Arc::new(SemanticTestEmbeddingProvider)),
+        )
+        .expect("backend should open");
+        backend
+            .enable_vectors(
+                &VectorEnableRequest::new("semantic-test", 3)
+                    .expect("enable request should build")
+                    .with_auto_embed_on_write(true),
+            )
+            .expect("vector enablement should succeed on v3 store");
+        backend
+            .remember(build_memory(
+                "memory:semantic-v3",
+                "repo:mnemix",
+                "Formatting handbook",
+                "Formatting guidance for CLI output snapshots.",
+            ))
+            .expect("semantic candidate should store");
+
+        let (model, dimensions, list_embedding) =
+            embedding_snapshot(&backend, "memory:semantic-v3");
+        assert_eq!(model.as_deref(), Some("semantic-test"));
+        assert_eq!(dimensions, Some(3));
+        assert_eq!(list_embedding, Some(vec![1.0, 0.0, 0.0]));
+        assert!(backend.memory_embeddings.is_none());
+
+        let results = backend
+            .search(
+                &SearchQuery::new_with_mode(
+                    "style guide",
+                    Some(ScopeId::try_from("repo:mnemix").expect("valid scope")),
+                    QueryLimit::new(5).expect("valid limit"),
+                    RetrievalMode::SemanticOnly,
+                )
+                .expect("search query should build"),
+            )
+            .expect("semantic search should succeed");
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].id().as_str(), "memory:semantic-v3");
+    }
+
+    #[test]
+    fn open_with_matching_embedding_provider_reports_runtime_capability() {
+        let temp_dir = TempDir::new().expect("tempdir should be created");
+        let backend = LanceDbBackend::init(temp_dir.path()).expect("backend should initialize");
+        let settings = VectorSettings {
+            vectors_enabled: true,
+            auto_embed_on_write: true,
+            embedding_model: Some("test-embedder".to_string()),
+            embedding_dimensions: Some(3),
+        };
+        write_vector_settings(&backend, settings.clone()).expect("vector settings should persist");
+        drop(backend);
+
+        let backend = LanceDbBackend::open_with_options(
+            temp_dir.path(),
+            LanceDbOpenOptions::new().embedding_provider(Arc::new(TestEmbeddingProvider {
+                model_id: "test-embedder",
+                dimensions: 3,
+            })),
+        )
+        .expect("backend should open with matching provider");
+
+        assert_eq!(backend.vector_settings(), &settings);
+        assert!(backend.has_embedding_provider());
+        assert!(backend.can_embed_on_write());
+    }
+
+    #[test]
+    fn open_rejects_provider_model_mismatch() {
+        let temp_dir = TempDir::new().expect("tempdir should be created");
+        let backend = LanceDbBackend::init(temp_dir.path()).expect("backend should initialize");
+        write_vector_settings(
+            &backend,
+            VectorSettings {
+                vectors_enabled: true,
+                auto_embed_on_write: true,
+                embedding_model: Some("expected-model".to_string()),
+                embedding_dimensions: Some(3),
+            },
+        )
+        .expect("vector settings should persist");
+        drop(backend);
+
+        let result = LanceDbBackend::open_with_options(
+            temp_dir.path(),
+            LanceDbOpenOptions::new().embedding_provider(Arc::new(TestEmbeddingProvider {
+                model_id: "different-model",
+                dimensions: 3,
+            })),
+        );
+
+        assert!(matches!(
+            result,
+            Err(LanceDbError::InvalidVectorSettings { details })
+            if details.contains("expected-model") && details.contains("different-model")
+        ));
+    }
+
+    #[test]
+    fn open_rejects_provider_dimension_mismatch() {
+        let temp_dir = TempDir::new().expect("tempdir should be created");
+        let backend = LanceDbBackend::init(temp_dir.path()).expect("backend should initialize");
+        write_vector_settings(
+            &backend,
+            VectorSettings {
+                vectors_enabled: true,
+                auto_embed_on_write: true,
+                embedding_model: Some("test-embedder".to_string()),
+                embedding_dimensions: Some(8),
+            },
+        )
+        .expect("vector settings should persist");
+        drop(backend);
+
+        let result = LanceDbBackend::open_with_options(
+            temp_dir.path(),
+            LanceDbOpenOptions::new().embedding_provider(Arc::new(TestEmbeddingProvider {
+                model_id: "test-embedder",
+                dimensions: 3,
+            })),
+        );
+
+        assert!(matches!(
+            result,
+            Err(LanceDbError::InvalidVectorSettings { details })
+            if details.contains("8") && details.contains("3")
+        ));
+    }
+
+    #[test]
+    fn open_rejects_auto_embed_without_vectors_enabled() {
+        let temp_dir = TempDir::new().expect("tempdir should be created");
+        let backend = LanceDbBackend::init(temp_dir.path()).expect("backend should initialize");
+        write_vector_settings(
+            &backend,
+            VectorSettings {
+                vectors_enabled: false,
+                auto_embed_on_write: true,
+                embedding_model: None,
+                embedding_dimensions: None,
+            },
+        )
+        .expect("vector settings should persist");
+        drop(backend);
+
+        let result = LanceDbBackend::open(temp_dir.path());
+
+        assert!(matches!(
+            result,
+            Err(LanceDbError::InvalidVectorSettings { details })
+            if details.contains("auto-embed-on-write")
+        ));
     }
 
     #[test]
@@ -2126,6 +4728,53 @@ mod tests {
     }
 
     #[test]
+    fn recall_semantic_only_marks_semantic_matches() {
+        let temp_dir = TempDir::new().expect("tempdir should be created");
+        let mut backend = LanceDbBackend::init_with_options(
+            temp_dir.path(),
+            LanceDbOpenOptions::new().embedding_provider(Arc::new(SemanticTestEmbeddingProvider)),
+        )
+        .expect("backend should initialize");
+        backend
+            .enable_vectors(
+                &VectorEnableRequest::new("semantic-test", 3)
+                    .expect("enable request should build")
+                    .with_auto_embed_on_write(true),
+            )
+            .expect("vector enablement should succeed");
+        backend
+            .remember(build_memory_with(MemoryFixture {
+                id: "memory:semantic-summary",
+                scope: "repo:mnemix",
+                kind: MemoryKind::Summary,
+                title: "Formatting handbook",
+                summary: "Snapshot presentation guidance",
+                detail: "Formatting conventions for CLI output.",
+                importance: 90,
+                pin_reason: None,
+                updated_at_secs: 5,
+            }))
+            .expect("semantic summary should store");
+
+        let result = backend
+            .recall(
+                &RecallQuery::builder()
+                    .scope(ScopeId::try_from("repo:mnemix").expect("valid scope"))
+                    .text("style guide")
+                    .expect("text should be valid")
+                    .retrieval_mode(RetrievalMode::SemanticOnly)
+                    .build()
+                    .expect("query should build"),
+            )
+            .expect("semantic recall should succeed");
+
+        assert_eq!(result.summaries().len(), 1);
+        let reasons = result.summaries()[0].explanation().reasons();
+        assert!(reasons.contains(&RecallReason::SemanticMatch));
+        assert!(!reasons.contains(&RecallReason::TextMatch));
+    }
+
+    #[test]
     fn recall_summary_only_keeps_pinned_summaries_visible() {
         let (_temp_dir, mut backend) = new_backend();
         let scope = "repo:mnemix";
@@ -2253,6 +4902,54 @@ mod tests {
         let summary_reasons = stable_summary.explanation().reasons();
         assert!(!summary_reasons.contains(&RecallReason::ImportanceBoost));
         assert!(!summary_reasons.contains(&RecallReason::RecencyBoost));
+    }
+
+    #[test]
+    fn recall_hybrid_marks_hybrid_matches() {
+        let temp_dir = TempDir::new().expect("tempdir should be created");
+        let mut backend = LanceDbBackend::init_with_options(
+            temp_dir.path(),
+            LanceDbOpenOptions::new().embedding_provider(Arc::new(SemanticTestEmbeddingProvider)),
+        )
+        .expect("backend should initialize");
+        backend
+            .enable_vectors(
+                &VectorEnableRequest::new("semantic-test", 3)
+                    .expect("enable request should build")
+                    .with_auto_embed_on_write(true),
+            )
+            .expect("vector enablement should succeed");
+        backend
+            .remember(build_memory_with(MemoryFixture {
+                id: "memory:hybrid-summary",
+                scope: "repo:mnemix",
+                kind: MemoryKind::Summary,
+                title: "Formatting handbook",
+                summary: "Formatting handbook",
+                detail: "Formatting handbook for output rendering.",
+                importance: 90,
+                pin_reason: None,
+                updated_at_secs: 5,
+            }))
+            .expect("hybrid summary should store");
+
+        let result = backend
+            .recall(
+                &RecallQuery::builder()
+                    .scope(ScopeId::try_from("repo:mnemix").expect("valid scope"))
+                    .text("output")
+                    .expect("text should be valid")
+                    .retrieval_mode(RetrievalMode::Hybrid)
+                    .build()
+                    .expect("query should build"),
+            )
+            .expect("hybrid recall should succeed");
+
+        assert_eq!(result.summaries().len(), 1);
+        let reasons = result.summaries()[0].explanation().reasons();
+        assert!(reasons.contains(&RecallReason::HybridMatch));
+        assert!(!reasons.contains(&RecallReason::TextMatch));
+        assert!(!reasons.contains(&RecallReason::SemanticMatch));
     }
 
     #[test]

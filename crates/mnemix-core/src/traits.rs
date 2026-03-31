@@ -19,6 +19,10 @@ pub enum BackendCapability {
     Pinning,
     /// The backend can execute recall and search flows.
     Search,
+    /// The backend can execute semantic retrieval.
+    SemanticSearch,
+    /// The backend can merge lexical and semantic retrieval.
+    HybridSearch,
     /// The backend can inspect version history.
     History,
     /// The backend can restore a prior state as a new head version.
@@ -66,6 +70,18 @@ impl BackendCapabilities {
     #[must_use]
     pub fn supports_search(&self) -> bool {
         self.0.contains(&BackendCapability::Search)
+    }
+
+    /// Returns `true` when the backend supports semantic retrieval.
+    #[must_use]
+    pub fn supports_semantic_search(&self) -> bool {
+        self.0.contains(&BackendCapability::SemanticSearch)
+    }
+
+    /// Returns `true` when the backend supports hybrid retrieval.
+    #[must_use]
+    pub fn supports_hybrid_search(&self) -> bool {
+        self.0.contains(&BackendCapability::HybridSearch)
     }
 
     /// Returns `true` when the backend can inspect history or versions.
@@ -170,7 +186,7 @@ pub trait PinningBackend: StorageBackend {
     fn unpin(&mut self, id: &MemoryId) -> Result<Option<MemoryRecord>, Self::Error>;
 }
 
-/// Supports recall and text-first retrieval flows.
+/// Supports recall and retrieval flows.
 pub trait RecallBackend: StorageBackend {
     /// Returns layered memory results relevant to a recall request.
     ///
@@ -187,6 +203,32 @@ pub trait RecallBackend: StorageBackend {
     /// Returns [`Self::Error`](StorageBackend::Error) when search is
     /// unsupported or execution fails.
     fn search(&self, query: &SearchQuery) -> Result<Vec<MemoryRecord>, Self::Error>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{BackendCapabilities, BackendCapability};
+
+    #[test]
+    fn capability_helpers_detect_semantic_search_support() {
+        let capabilities = BackendCapabilities::new([
+            BackendCapability::Search,
+            BackendCapability::SemanticSearch,
+        ]);
+
+        assert!(capabilities.supports_search());
+        assert!(capabilities.supports_semantic_search());
+        assert!(!capabilities.supports_hybrid_search());
+    }
+
+    #[test]
+    fn capability_helpers_detect_hybrid_search_support() {
+        let capabilities =
+            BackendCapabilities::new([BackendCapability::Search, BackendCapability::HybridSearch]);
+
+        assert!(capabilities.supports_hybrid_search());
+        assert!(!capabilities.supports_semantic_search());
+    }
 }
 
 /// Supports history inspection and version listing.

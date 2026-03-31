@@ -31,6 +31,7 @@ mod restore;
 mod search;
 mod show;
 mod stats;
+mod vectors;
 mod versions;
 
 pub(crate) fn execute(command: &Command, store_path: &Path) -> Result<CommandOutput, CliError> {
@@ -46,6 +47,7 @@ pub(crate) fn execute(command: &Command, store_path: &Path) -> Result<CommandOut
         Command::Versions(args) => versions::run(store_path, args),
         Command::Restore(args) => restore::run(store_path, args),
         Command::Optimize(args) => optimize::run(store_path, args),
+        Command::Vectors(args) => vectors::run(store_path, args),
         Command::Stats(args) => stats::run(store_path, args),
         Command::Export(args) => export::run(store_path, args),
         Command::Import(args) => import::run(store_path, args),

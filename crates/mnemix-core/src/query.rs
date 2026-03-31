@@ -70,6 +70,18 @@ pub enum DisclosureDepth {
     Full,
 }
 
+/// Selects how a retrieval query should match candidate memories.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub enum RetrievalMode {
+    /// Use lexical and metadata-driven retrieval only.
+    #[default]
+    LexicalOnly,
+    /// Use semantic retrieval only.
+    SemanticOnly,
+    /// Merge lexical and semantic candidates.
+    Hybrid,
+}
+
 /// Identifies the retrieval layer an item was surfaced from.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum RecallLayer {
@@ -90,6 +102,10 @@ pub enum RecallReason {
     ScopeFilter,
     /// The item matched the requested text hint.
     TextMatch,
+    /// The item matched via semantic retrieval.
+    SemanticMatch,
+    /// The item matched via combined lexical and semantic retrieval.
+    HybridMatch,
     /// The item is a summary memory favored for compact recall.
     SummaryKind,
     /// The item received an importance-based boost to its rank.
@@ -227,6 +243,7 @@ pub struct RecallQuery {
     text: Option<String>,
     limit: QueryLimit,
     disclosure_depth: DisclosureDepth,
+    retrieval_mode: RetrievalMode,
 }
 
 impl RecallQuery {
@@ -238,6 +255,7 @@ impl RecallQuery {
             text: None,
             limit: QueryLimit::default(),
             disclosure_depth: DisclosureDepth::default(),
+            retrieval_mode: RetrievalMode::default(),
         }
     }
 
@@ -264,6 +282,12 @@ impl RecallQuery {
     pub const fn disclosure_depth(&self) -> DisclosureDepth {
         self.disclosure_depth
     }
+
+    /// Returns the retrieval mode for the query.
+    #[must_use]
+    pub const fn retrieval_mode(&self) -> RetrievalMode {
+        self.retrieval_mode
+    }
 }
 
 /// Builder for [`RecallQuery`].
@@ -273,6 +297,7 @@ pub struct RecallQueryBuilder {
     text: Option<String>,
     limit: QueryLimit,
     disclosure_depth: DisclosureDepth,
+    retrieval_mode: RetrievalMode,
 }
 
 impl RecallQueryBuilder {
@@ -307,6 +332,13 @@ impl RecallQueryBuilder {
         self
     }
 
+    /// Selects how recall should retrieve candidate memories.
+    #[must_use]
+    pub fn retrieval_mode(mut self, value: RetrievalMode) -> Self {
+        self.retrieval_mode = value;
+        self
+    }
+
     /// Builds the query.
     ///
     /// # Errors
@@ -323,20 +355,22 @@ impl RecallQueryBuilder {
             text: self.text,
             limit: self.limit,
             disclosure_depth: self.disclosure_depth,
+            retrieval_mode: self.retrieval_mode,
         })
     }
 }
 
-/// A text-first search request.
+/// A search request.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct SearchQuery {
     text: String,
     scope: Option<ScopeId>,
     limit: QueryLimit,
+    retrieval_mode: RetrievalMode,
 }
 
 impl SearchQuery {
-    /// Creates a new search query.
+    /// Creates a lexical-only search query.
     ///
     /// # Errors
     ///
@@ -346,10 +380,25 @@ impl SearchQuery {
         scope: Option<ScopeId>,
         limit: QueryLimit,
     ) -> Result<Self, CoreError> {
+        Self::new_with_mode(text, scope, limit, RetrievalMode::LexicalOnly)
+    }
+
+    /// Creates a new search query with an explicit retrieval mode.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError`] when the search text is blank.
+    pub fn new_with_mode(
+        text: impl Into<String>,
+        scope: Option<ScopeId>,
+        limit: QueryLimit,
+        retrieval_mode: RetrievalMode,
+    ) -> Result<Self, CoreError> {
         Ok(Self {
             text: validate_query_text("search_text", &text.into())?,
             scope,
             limit,
+            retrieval_mode,
         })
     }
 
@@ -369,6 +418,12 @@ impl SearchQuery {
     #[must_use]
     pub const fn limit(&self) -> QueryLimit {
         self.limit
+    }
+
+    /// Returns the retrieval mode for the query.
+    #[must_use]
+    pub const fn retrieval_mode(&self) -> RetrievalMode {
+        self.retrieval_mode
     }
 }
 
@@ -540,6 +595,27 @@ mod tests {
     }
 
     #[test]
+    fn recall_query_defaults_to_lexical_retrieval() {
+        let query = RecallQuery::builder()
+            .scope(ScopeId::try_from("repo:mnemix").expect("scope"))
+            .build()
+            .expect("query should build");
+
+        assert_eq!(query.retrieval_mode(), RetrievalMode::LexicalOnly);
+    }
+
+    #[test]
+    fn recall_query_preserves_explicit_retrieval_mode() {
+        let query = RecallQuery::builder()
+            .scope(ScopeId::try_from("repo:mnemix").expect("scope"))
+            .retrieval_mode(RetrievalMode::Hybrid)
+            .build()
+            .expect("query should build");
+
+        assert_eq!(query.retrieval_mode(), RetrievalMode::Hybrid);
+    }
+
+    #[test]
     fn recall_result_counts_all_layers() {
         let entry = RecallEntry::new(
             demo_memory(),
@@ -573,6 +649,27 @@ mod tests {
                 field: "search_text"
             })
         );
+    }
+
+    #[test]
+    fn search_query_defaults_to_lexical_retrieval() {
+        let query = SearchQuery::new("memory", None, QueryLimit::default())
+            .expect("search query should build");
+
+        assert_eq!(query.retrieval_mode(), RetrievalMode::LexicalOnly);
+    }
+
+    #[test]
+    fn search_query_preserves_explicit_retrieval_mode() {
+        let query = SearchQuery::new_with_mode(
+            "memory",
+            None,
+            QueryLimit::default(),
+            RetrievalMode::Hybrid,
+        )
+        .expect("search query should build");
+
+        assert_eq!(query.retrieval_mode(), RetrievalMode::Hybrid);
     }
 
     #[test]

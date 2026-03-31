@@ -49,6 +49,7 @@ pub(crate) enum Command {
     Versions(VersionsArgs),
     Restore(RestoreArgs),
     Optimize(OptimizeArgs),
+    Vectors(VectorsArgs),
     Stats(StatsArgs),
     Export(ExportArgs),
     Import(ImportArgs),
@@ -190,6 +191,37 @@ pub(crate) struct OptimizeArgs {
 
     #[arg(long, value_parser = clap::value_parser!(u16).range(0..=3650), default_value_t = 30)]
     pub(crate) older_than_days: u16,
+}
+
+#[derive(clap::Args, Debug)]
+pub(crate) struct VectorsArgs {
+    #[command(subcommand)]
+    pub(crate) command: VectorsCommand,
+}
+
+#[derive(Subcommand, Debug)]
+pub(crate) enum VectorsCommand {
+    Show,
+    Enable(VectorEnableArgs),
+    Backfill(VectorBackfillArgs),
+}
+
+#[derive(clap::Args, Debug)]
+pub(crate) struct VectorEnableArgs {
+    #[arg(long)]
+    pub(crate) model: String,
+
+    #[arg(long, value_parser = clap::value_parser!(u32).range(1..))]
+    pub(crate) dimensions: u32,
+
+    #[arg(long)]
+    pub(crate) auto_embed_on_write: bool,
+}
+
+#[derive(clap::Args, Debug)]
+pub(crate) struct VectorBackfillArgs {
+    #[arg(long)]
+    pub(crate) apply: bool,
 }
 
 #[derive(clap::Args, Debug)]

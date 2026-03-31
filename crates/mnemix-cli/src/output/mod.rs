@@ -377,6 +377,8 @@ fn recall_reason_name(reason: RecallReason) -> &'static str {
         RecallReason::Pinned => "pinned",
         RecallReason::ScopeFilter => "scope_filter",
         RecallReason::TextMatch => "text_match",
+        RecallReason::SemanticMatch => "semantic_match",
+        RecallReason::HybridMatch => "hybrid_match",
         RecallReason::SummaryKind => "summary_kind",
         RecallReason::ImportanceBoost => "importance_boost",
         RecallReason::RecencyBoost => "recency_boost",
