@@ -12,6 +12,7 @@ const DEFAULT_STORE_PATH: &str = ".mnemix";
 const DEFAULT_HISTORY_LIMIT: u16 = 20;
 const DEFAULT_LIST_LIMIT: u16 = 20;
 const DEFAULT_SEARCH_LIMIT: u16 = 10;
+const DEFAULT_UI_LIMIT: u16 = 200;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about = "Human-first CLI for Mnemix")]
@@ -39,6 +40,7 @@ impl Cli {
 #[derive(Subcommand, Debug)]
 pub(crate) enum Command {
     Init,
+    Ui(UiArgs),
     Remember(Box<RememberArgs>),
     Recall(RecallArgs),
     Search(SearchArgs),
@@ -53,6 +55,12 @@ pub(crate) enum Command {
     Export(ExportArgs),
     Import(ImportArgs),
     Policy(PolicyArgs),
+}
+
+#[derive(clap::Args, Debug)]
+pub(crate) struct UiArgs {
+    #[arg(long, value_parser = clap::value_parser!(u16).range(1..=1000), default_value_t = DEFAULT_UI_LIMIT)]
+    pub(crate) limit: u16,
 }
 
 #[derive(clap::Args, Debug)]

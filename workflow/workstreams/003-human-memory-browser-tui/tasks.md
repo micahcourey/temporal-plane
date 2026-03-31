@@ -11,48 +11,51 @@ CLI.
 ### Planning And Scope
 
 - [x] Create a repo-native workstream for the human memory browser TUI
-- [ ] Confirm the v1 command shape and naming, such as `mnemix ui`
-- [ ] Decide whether recent-memory browsing requires a new shared core trait or
+- [x] Confirm the v1 command shape and naming, such as `mnemix ui`
+- [x] Decide whether recent-memory browsing requires a new shared core trait or
   can reuse existing boundaries cleanly
+  Current decision: promote browse/list behavior behind a shared
+  `mnemix-core::BrowseBackend` contract so human-facing product surfaces do not
+  depend directly on LanceDB-specific helpers.
 
 ### Data Access And Contracts
 
-- [ ] Add any storage-agnostic browse/list contract needed for recent-memory
+- [x] Add any storage-agnostic browse/list contract needed for recent-memory
   browsing
-- [ ] Implement the shared browse/list behavior in the LanceDB backend if
+- [x] Implement the shared browse/list behavior in the LanceDB backend if
   promoted into product surfaces
-- [ ] Define the memory-detail payload the TUI needs for summary, detail, tags,
+- [x] Define the memory-detail payload the TUI needs for summary, detail, tags,
   pin state, and source metadata
 
 ### Interactive CLI Surface
 
-- [ ] Add the interactive CLI entrypoint and terminal lifecycle handling
-- [ ] Add pane focus, selection, and keyboard navigation state
-- [ ] Add empty-store, invalid-store, and missing-scope handling
+- [x] Add the interactive CLI entrypoint and terminal lifecycle handling
+- [x] Add pane focus, selection, and keyboard navigation state
+- [x] Add empty-store, invalid-store, and missing-scope handling
 
 ### Browse, Search, And Detail UX
 
-- [ ] Implement recent-memory browsing
-- [ ] Implement pinned-memory browsing
-- [ ] Implement text search entry and result navigation
-- [ ] Implement separate `from` / `to` date fields for search filtering
-- [ ] Implement the full memory-detail preview with scrolling
+- [x] Implement recent-memory browsing
+- [x] Implement pinned-memory browsing
+- [x] Implement text search entry and result navigation
+- [x] Implement separate `from` / `to` date fields for search filtering
+- [x] Implement the full memory-detail preview with scrolling
 
 ### Documentation And Verification
 
-- [ ] Document the TUI command, keybindings, and v1 scope
-- [ ] Add targeted tests for browse modes, search flow, and detail rendering
-- [ ] Run the relevant CLI and repo verification gates
+- [x] Document the TUI command, keybindings, and v1 scope
+- [x] Add targeted tests for browse modes, search flow, and detail rendering
+- [x] Run the relevant CLI and repo verification gates
 
 ## Validation Checklist
 
-- [ ] Keep `STATUS.md` aligned with the true execution state
-- [ ] Verify the TUI remains keyboard-first and understandable without color
+- [x] Keep `STATUS.md` aligned with the true execution state
+- [x] Verify the TUI remains keyboard-first and understandable without color
   alone
-- [ ] Verify date-filtered search works through explicit date fields rather than
+- [x] Verify date-filtered search works through explicit date fields rather than
   fuzzy natural-language parsing
-- [ ] Verify scope filtering and empty-state behavior explicitly
-- [ ] Preserve the existing static CLI behavior for scripting and automation
+- [x] Verify scope filtering and empty-state behavior explicitly
+- [x] Preserve the existing static CLI behavior for scripting and automation
 
 ## Notes
 

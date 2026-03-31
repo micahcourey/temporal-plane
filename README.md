@@ -157,6 +157,12 @@ mnemix --store .mnemix recall --scope my-project
 mnemix --store .mnemix search --text "storage decision" --scope my-project
 ```
 
+### Browse interactively
+
+```bash
+mnemix --store .mnemix ui
+```
+
 ### Checkpoint before a risky operation
 
 ```bash

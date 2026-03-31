@@ -6,6 +6,7 @@ mod cli;
 mod cmd;
 mod errors;
 mod output;
+mod tui;
 
 use std::process::ExitCode;
 
@@ -18,6 +19,20 @@ use crate::{
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
+    if let cli::Command::Ui(args) = &cli.command {
+        if cli.json {
+            let error = errors::CliError::UiJsonUnsupported;
+            eprint!("{}", render_error(&error, cli.output_format()));
+            return ExitCode::FAILURE;
+        }
+        return match cmd::run_ui(&cli.store, args) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprint!("{}", render_error(&error, cli.output_format()));
+                ExitCode::FAILURE
+            }
+        };
+    }
     match cmd::execute(&cli.command, &cli.store) {
         Ok(result) => match render_output(&result, cli.output_format()) {
             Ok(rendered) => {

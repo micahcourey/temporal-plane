@@ -220,6 +220,11 @@ fn mx_alias_binary_supports_help() {
 }
 
 #[test]
+fn ui_command_supports_help() {
+    cli().args(["ui", "--help"]).assert().success();
+}
+
+#[test]
 fn export_surfaces_success_as_json_status() {
     let temp_dir = tempdir().expect("temp dir should be created");
     let store = temp_dir.path().join("store");

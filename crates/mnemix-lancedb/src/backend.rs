@@ -39,9 +39,9 @@ use mnemix_core::{
     },
     retention::{CleanupMode, PreOperationCheckpointPolicy},
     traits::{
-        AdvancedStorageBackend, BackendCapabilities, BackendCapability, CheckpointBackend,
-        HistoryBackend, MemoryRepository, OptimizeBackend, PinningBackend, RecallBackend,
-        RestoreBackend, StatsBackend, StorageBackend,
+        AdvancedStorageBackend, BackendCapabilities, BackendCapability, BrowseBackend,
+        CheckpointBackend, HistoryBackend, MemoryRepository, OptimizeBackend, PinningBackend,
+        RecallBackend, RestoreBackend, StatsBackend, StorageBackend,
     },
 };
 use thiserror::Error;
@@ -1019,6 +1019,24 @@ impl MemoryRepository for LanceDbBackend {
             .next()
             .map(|payload| serde_json::from_str::<MemoryRecord>(&payload).map_err(Into::into))
             .transpose()
+    }
+}
+
+impl BrowseBackend for LanceDbBackend {
+    fn list_memories(
+        &self,
+        scope: Option<&ScopeId>,
+        limit: QueryLimit,
+    ) -> Result<Vec<MemoryRecord>, Self::Error> {
+        LanceDbBackend::list_memories(self, scope, limit)
+    }
+
+    fn list_pinned_memories(
+        &self,
+        scope: Option<&ScopeId>,
+        limit: QueryLimit,
+    ) -> Result<Vec<MemoryRecord>, Self::Error> {
+        LanceDbBackend::list_pinned_memories(self, scope, limit)
     }
 }
 

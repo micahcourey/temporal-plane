@@ -14,8 +14,8 @@ use mnemix_core::{
     Importance, MemoryId, MemoryKind, MemoryRecord, OptimizeRequest, PreOperationCheckpointPolicy,
     QueryLimit, RestoreRequest, ScopeId, SearchQuery, StatsQuery, TagName, VersionNumber,
     traits::{
-        CheckpointBackend, HistoryBackend, MemoryRepository, OptimizeBackend, RecallBackend,
-        RestoreBackend, StatsBackend,
+        BrowseBackend, CheckpointBackend, HistoryBackend, MemoryRepository, OptimizeBackend,
+        PinningBackend, RecallBackend, RestoreBackend, StatsBackend,
     },
 };
 use mnemix_lancedb::LanceDbBackend;
@@ -114,6 +114,53 @@ fn search_checkpoint_stats_and_history_are_available() {
     assert_eq!(stats.total_memories(), 1);
     assert!(stats.latest_checkpoint().is_some());
     assert!(!history.is_empty());
+}
+
+#[test]
+fn browse_backend_lists_recent_and_pinned_memories() {
+    let temp_dir = TempDir::new().expect("tempdir should be created");
+    let mut backend = LanceDbBackend::init(temp_dir.path()).expect("backend should initialize");
+    let repo_scope = ScopeId::try_from("repo:mnemix").expect("valid scope");
+
+    backend
+        .remember(build_memory(
+            "memory:browse-1",
+            "repo:mnemix",
+            "Browseable memory",
+            "Recent memory listings should include this record.",
+        ))
+        .expect("memory should store");
+    backend
+        .remember(build_memory(
+            "memory:browse-2",
+            "repo:mnemix",
+            "Pinned browseable memory",
+            "Pinned memory listings should include this record.",
+        ))
+        .expect("memory should store");
+    backend
+        .pin(
+            &MemoryId::try_from("memory:browse-2").expect("valid id"),
+            "browse integration coverage",
+        )
+        .expect("pin should succeed");
+
+    let recent = BrowseBackend::list_memories(
+        &backend,
+        Some(&repo_scope),
+        QueryLimit::new(10).expect("valid limit"),
+    )
+    .expect("recent memories should load");
+    let pinned = BrowseBackend::list_pinned_memories(
+        &backend,
+        Some(&repo_scope),
+        QueryLimit::new(10).expect("valid limit"),
+    )
+    .expect("pinned memories should load");
+
+    assert_eq!(recent.len(), 2);
+    assert_eq!(pinned.len(), 1);
+    assert_eq!(pinned[0].id().as_str(), "memory:browse-2");
 }
 
 #[test]
