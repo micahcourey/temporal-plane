@@ -6,8 +6,8 @@ use std::path::Path;
 use crate::{
     BranchListResult, BranchName, BranchRecord, BranchRequest, Checkpoint, CheckpointRequest,
     CloneInfo, HistoryQuery, ImportStageRequest, ImportStageResult, MemoryId, MemoryRecord,
-    OptimizeRequest, OptimizeResult, RecallQuery, RecallResult, RestoreRequest, RestoreResult,
-    SearchQuery, StatsQuery, StatsSnapshot, VersionRecord,
+    OptimizeRequest, OptimizeResult, QueryLimit, RecallQuery, RecallResult, RestoreRequest,
+    RestoreResult, ScopeId, SearchQuery, StatsQuery, StatsSnapshot, VersionRecord,
 };
 
 /// An individually advertised backend capability.
@@ -149,6 +149,33 @@ pub trait MemoryRepository: StorageBackend {
     /// Returns [`Self::Error`](StorageBackend::Error) when the backend cannot
     /// perform the lookup.
     fn get(&self, id: &MemoryId) -> Result<Option<MemoryRecord>, Self::Error>;
+}
+
+/// Supports browse-first inspection flows without requiring text search.
+pub trait BrowseBackend: StorageBackend {
+    /// Lists stored memories ordered for human browsing.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Self::Error`](StorageBackend::Error) when the backend cannot
+    /// perform the listing.
+    fn list_memories(
+        &self,
+        scope: Option<&ScopeId>,
+        limit: QueryLimit,
+    ) -> Result<Vec<MemoryRecord>, Self::Error>;
+
+    /// Lists pinned memories ordered for human browsing.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Self::Error`](StorageBackend::Error) when the backend cannot
+    /// perform the listing.
+    fn list_pinned_memories(
+        &self,
+        scope: Option<&ScopeId>,
+        limit: QueryLimit,
+    ) -> Result<Vec<MemoryRecord>, Self::Error>;
 }
 
 /// Supports explicit pinning state transitions for existing memories.

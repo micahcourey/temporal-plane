@@ -7,7 +7,7 @@ use mnemix_core::{
 use mnemix_lancedb::{LanceDbBackend, LanceDbError};
 
 use crate::{
-    cli::{Command, RememberArgs},
+    cli::{Command, RememberArgs, UiArgs},
     errors::CliError,
     output::{
         CheckpointResultView, CommandOutput, MemoryListView, MemoryResultView, OptimizeResultView,
@@ -32,11 +32,13 @@ mod restore;
 mod search;
 mod show;
 mod stats;
+mod ui;
 mod versions;
 
 pub(crate) fn execute(command: &Command, store_path: &Path) -> Result<CommandOutput, CliError> {
     match command {
         Command::Init => init::run(store_path),
+        Command::Ui(_) => unreachable!("interactive UI is handled separately"),
         Command::Remember(args) => remember::run(store_path, args),
         Command::Recall(args) => recall::run(store_path, args),
         Command::Search(args) => search::run(store_path, args),
@@ -52,6 +54,10 @@ pub(crate) fn execute(command: &Command, store_path: &Path) -> Result<CommandOut
         Command::Import(args) => import::run(store_path, args),
         Command::Policy(args) => policy::run(store_path, args),
     }
+}
+
+pub(crate) fn run_ui(store_path: &Path, args: &UiArgs) -> Result<(), CliError> {
+    ui::run(store_path, args)
 }
 
 pub(super) fn recall_result(

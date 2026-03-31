@@ -11,11 +11,12 @@
 //! use std::collections::BTreeMap;
 //!
 //! use mnemix_core::{
-//!     BackendCapabilities, BackendCapability, Checkpoint, CheckpointBackend, CheckpointRequest,
-//!     Confidence, CoreError, DisclosureDepth, HistoryBackend, HistoryQuery, Importance,
-//!     MemoryId, MemoryKind, MemoryRecord, MemoryRepository, RecallBackend, RecallEntry,
-//!     RecallExplanation, RecallLayer, RecallQuery, RecallReason, RecallResult, ScopeId,
-//!     SearchQuery, StatsBackend, StatsQuery, StorageBackend, TagName, VersionNumber,
+//!     BackendCapabilities, BackendCapability, BrowseBackend, Checkpoint, CheckpointBackend,
+//!     CheckpointRequest, Confidence, CoreError, DisclosureDepth, HistoryBackend, HistoryQuery,
+//!     Importance, MemoryId, MemoryKind, MemoryRecord, MemoryRepository, QueryLimit,
+//!     RecallBackend, RecallEntry, RecallExplanation, RecallLayer, RecallQuery, RecallReason,
+//!     RecallResult, ScopeId, SearchQuery, StatsBackend, StatsQuery, StorageBackend, TagName,
+//!     VersionNumber,
 //! };
 //!
 //! #[derive(Default)]
@@ -89,6 +90,41 @@
 //!             .cloned()
 //!             .collect();
 //!         matches.truncate(query.limit().value().into());
+//!         Ok(matches)
+//!     }
+//! }
+//!
+//! impl BrowseBackend for ExampleMemoryStore {
+//!     fn list_memories(
+//!         &self,
+//!         scope: Option<&ScopeId>,
+//!         limit: QueryLimit,
+//!     ) -> Result<Vec<MemoryRecord>, Self::Error> {
+//!         let mut matches = self
+//!             .records
+//!             .iter()
+//!             .filter(|record| scope.is_none_or(|scope| record.scope_id() == scope))
+//!             .cloned()
+//!             .collect::<Vec<_>>();
+//!         matches.truncate(limit.value().into());
+//!         Ok(matches)
+//!     }
+//!
+//!     fn list_pinned_memories(
+//!         &self,
+//!         scope: Option<&ScopeId>,
+//!         limit: QueryLimit,
+//!     ) -> Result<Vec<MemoryRecord>, Self::Error> {
+//!         let mut matches = self
+//!             .records
+//!             .iter()
+//!             .filter(|record| {
+//!                 record.pin_state().is_pinned()
+//!                     && scope.is_none_or(|scope| record.scope_id() == scope)
+//!             })
+//!             .cloned()
+//!             .collect::<Vec<_>>();
+//!         matches.truncate(limit.value().into());
 //!         Ok(matches)
 //!     }
 //! }
@@ -204,7 +240,7 @@ pub use retention::{
     RetentionPolicy,
 };
 pub use traits::{
-    AdvancedStorageBackend, BackendCapabilities, BackendCapability, CheckpointBackend,
-    HistoryBackend, MemoryRepository, OptimizeBackend, PinningBackend, RecallBackend,
-    RestoreBackend, StatsBackend, StorageBackend,
+    AdvancedStorageBackend, BackendCapabilities, BackendCapability, BrowseBackend,
+    CheckpointBackend, HistoryBackend, MemoryRepository, OptimizeBackend, PinningBackend,
+    RecallBackend, RestoreBackend, StatsBackend, StorageBackend,
 };

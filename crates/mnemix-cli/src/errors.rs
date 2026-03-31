@@ -36,6 +36,9 @@ pub(crate) enum CliError {
 
     #[error("store `{path}` has not been initialized; run `mnemix init` first")]
     StoreNotInitialized { path: PathBuf },
+
+    #[error("`mnemix ui` does not support `--json`")]
+    UiJsonUnsupported,
 }
 
 impl CliError {
@@ -51,6 +54,7 @@ impl CliError {
             Self::MemoryNotFound { .. } => "memory_not_found",
             Self::ScopedHistoryNotSupported => "scoped_history_not_supported",
             Self::StoreNotInitialized { .. } => "store_not_initialized",
+            Self::UiJsonUnsupported => "ui_json_unsupported",
         }
     }
 }
