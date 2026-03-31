@@ -2,8 +2,9 @@ use std::collections::BTreeMap;
 
 use crate::output::{
     CheckpointResultView, CommandOutput, MemoryDetailView, MemoryListView, MemoryResultView,
-    MemorySummaryView, OptimizeResultView, RecallEntryView, RecallResultView, RestoreResultView,
-    StatsResultView, StatusView, VersionListView,
+    MemorySummaryView, OptimizeResultView, PolicyDecisionView, PolicyRuleEvaluationView,
+    RecallEntryView, RecallResultView, RestoreResultView, StatsResultView, StatusView,
+    VersionListView,
 };
 
 pub(crate) fn render_human(output: &CommandOutput) -> String {
@@ -13,6 +14,7 @@ pub(crate) fn render_human(output: &CommandOutput) -> String {
         CommandOutput::Memory(view) => render_memory(&mut rendered, view),
         CommandOutput::MemoryList(view) => render_memory_list(&mut rendered, view),
         CommandOutput::Recall(view) => render_recall(&mut rendered, view),
+        CommandOutput::Policy(view) => render_policy(&mut rendered, view),
         CommandOutput::Checkpoint(view) => render_checkpoint(&mut rendered, view),
         CommandOutput::VersionList(view) => render_version_list(&mut rendered, view),
         CommandOutput::Restore(view) => render_restore(&mut rendered, view),
@@ -20,6 +22,65 @@ pub(crate) fn render_human(output: &CommandOutput) -> String {
         CommandOutput::Stats(view) => render_stats(&mut rendered, view),
     }
     rendered
+}
+
+fn render_policy(buffer: &mut String, view: &PolicyDecisionView) {
+    push_line(
+        buffer,
+        &format!("{} {}: {}", view.command, view.action, view.decision),
+    );
+    push_line(buffer, &format!("trigger: {}", view.trigger));
+    if let Some(workflow_key) = &view.workflow_key {
+        push_line(buffer, &format!("workflow_key: {workflow_key}"));
+    }
+    push_line(buffer, &format!("scope_strategy: {}", view.scope_strategy));
+    if !view.required_actions.is_empty() {
+        push_line(
+            buffer,
+            &format!("required_actions: {}", view.required_actions.join(", ")),
+        );
+    }
+    if !view.missing_actions.is_empty() {
+        push_line(
+            buffer,
+            &format!("missing_actions: {}", view.missing_actions.join(", ")),
+        );
+    }
+    for reason in &view.reasons {
+        push_line(buffer, &format!("reason: {reason}"));
+    }
+    if !view.matched_rules.is_empty() {
+        push_line(buffer, "matched_rules:");
+        for rule in &view.matched_rules {
+            render_policy_rule(buffer, rule);
+        }
+    }
+}
+
+fn render_policy_rule(buffer: &mut String, view: &PolicyRuleEvaluationView) {
+    push_line(buffer, "---");
+    push_line(buffer, &format!("id: {}", view.id));
+    push_line(buffer, &format!("mode: {}", view.mode));
+    push_line(buffer, &format!("satisfied: {}", view.satisfied));
+    push_line(
+        buffer,
+        &format!("skipped_via_reason: {}", view.skipped_via_reason),
+    );
+    if !view.required_actions.is_empty() {
+        push_line(
+            buffer,
+            &format!("required_actions: {}", view.required_actions.join(", ")),
+        );
+    }
+    if !view.missing_actions.is_empty() {
+        push_line(
+            buffer,
+            &format!("missing_actions: {}", view.missing_actions.join(", ")),
+        );
+    }
+    for reason in &view.reasons {
+        push_line(buffer, &format!("reason: {reason}"));
+    }
 }
 
 fn render_status(buffer: &mut String, view: &StatusView) {

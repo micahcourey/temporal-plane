@@ -1,6 +1,6 @@
 #![allow(deprecated, missing_docs, unused_crate_dependencies)]
 
-use std::path::Path;
+use std::{fs, path::Path};
 
 use assert_cmd::Command;
 use serde_json::Value;
@@ -26,6 +26,33 @@ fn run_json_ok(store: &Path, args: &[&str]) -> Value {
 
 fn init_store(store: &Path) -> Value {
     run_json_ok(store, &["init"])
+}
+
+fn write_policy_config(store: &Path) {
+    fs::write(
+        store.join("policy.toml"),
+        r#"
+version = 1
+
+[defaults]
+scope_strategy = "repo"
+evidence_ttl = "task"
+
+[[rules]]
+id = "commit-writeback"
+trigger = "on_git_commit"
+mode = "required_with_skip_reason"
+requires = ["writeback"]
+allow_skip = true
+on_unsatisfied = "block"
+
+[rules.when]
+host = ["coding-agent"]
+paths_any = ["adapters/**"]
+exclude_paths = ["docs/**"]
+"#,
+    )
+    .expect("policy config should be written");
 }
 
 fn remember_demo_memory(store: &Path) -> Value {
@@ -224,6 +251,93 @@ fn export_surfaces_success_as_json_status() {
             .contains(&destination.display().to_string())
     );
     assert!(destination.exists());
+}
+
+#[test]
+fn policy_check_without_config_defaults_to_allow() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let store = temp_dir.path().join("store");
+
+    let output = run_json_ok(
+        &store,
+        &[
+            "policy",
+            "check",
+            "--trigger",
+            "on_git_commit",
+            "--host",
+            "coding-agent",
+        ],
+    );
+
+    assert_eq!(output["kind"], "policy");
+    assert_eq!(output["data"]["action"], "check");
+    assert_eq!(output["data"]["decision"], "allow");
+    assert_eq!(
+        output["data"]["reasons"][0],
+        "No `policy.toml` file was found or it did not contain any rules; defaulting to allow."
+    );
+}
+
+#[test]
+fn policy_recorded_writeback_satisfies_commit_check() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let store = temp_dir.path().join("store");
+    let _ = init_store(&store);
+    write_policy_config(&store);
+
+    let blocked = run_json_ok(
+        &store,
+        &[
+            "policy",
+            "check",
+            "--trigger",
+            "on_git_commit",
+            "--workflow-key",
+            "commit-1",
+            "--host",
+            "coding-agent",
+            "--path",
+            "adapters/coding_agent_adapter.py",
+        ],
+    );
+    assert_eq!(blocked["kind"], "policy");
+    assert_eq!(blocked["data"]["decision"], "block");
+    assert_eq!(blocked["data"]["missing_actions"][0], "writeback");
+
+    let recorded = run_json_ok(
+        &store,
+        &[
+            "policy",
+            "record",
+            "--workflow-key",
+            "commit-1",
+            "--action",
+            "writeback",
+        ],
+    );
+    assert_eq!(recorded["kind"], "status");
+    assert_eq!(recorded["data"]["status"], "recorded");
+
+    let satisfied = run_json_ok(
+        &store,
+        &[
+            "policy",
+            "explain",
+            "--trigger",
+            "on_git_commit",
+            "--workflow-key",
+            "commit-1",
+            "--host",
+            "coding-agent",
+            "--path",
+            "adapters/coding_agent_adapter.py",
+        ],
+    );
+    assert_eq!(satisfied["kind"], "policy");
+    assert_eq!(satisfied["data"]["action"], "explain");
+    assert_eq!(satisfied["data"]["decision"], "allow");
+    assert_eq!(satisfied["data"]["matched_rules"][0]["satisfied"], true);
 }
 
 #[test]

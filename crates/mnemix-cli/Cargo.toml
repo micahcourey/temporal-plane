@@ -20,6 +20,7 @@ clap = { version = "4.5.53", features = ["derive"] }
 humantime.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+toml = "0.8.23"
 mnemix-core = { package = "mnemix-core", path = "../mnemix-core" }
 mnemix-lancedb = { package = "mnemix-lancedb", path = "../mnemix-lancedb" }
 thiserror.workspace = true

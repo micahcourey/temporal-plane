@@ -171,6 +171,7 @@ pub mod checkpoints;
 pub mod errors;
 pub mod maintenance;
 pub mod memory;
+pub mod policy;
 pub mod query;
 pub mod retention;
 pub mod traits;
@@ -189,6 +190,11 @@ pub use maintenance::{
     CloneInfo, CloneKind, ImportStageRequest, ImportStageResult, OptimizeRequest, OptimizeResult,
 };
 pub use memory::{Confidence, Importance, MemoryKind, MemoryRecord, MemoryRecordBuilder, PinState};
+pub use policy::{
+    EvidenceTtl, PolicyAction, PolicyConfig, PolicyContext, PolicyDecision, PolicyDecisionKind,
+    PolicyDefaults, PolicyEvidence, PolicyMode, PolicyRule, PolicyRuleCondition,
+    PolicyRuleEvaluation, PolicyTrigger, PolicyUnsatisfiedBehavior, ScopeStrategy, evaluate_policy,
+};
 pub use query::{
     DisclosureDepth, HistoryQuery, QueryLimit, RecallEntry, RecallExplanation, RecallLayer,
     RecallQuery, RecallReason, RecallResult, SearchQuery, StatsQuery, StatsSnapshot,

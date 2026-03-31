@@ -38,6 +38,25 @@ RecallReason = Literal[
 ]
 
 DisclosureDepth = Literal["summary_only", "summary_then_pinned", "full"]
+PolicyTrigger = Literal[
+    "on_task_start",
+    "on_git_commit",
+    "on_pr_open",
+    "on_review_start",
+    "on_release_prep",
+    "on_risky_change",
+]
+PolicyAction = Literal[
+    "recall",
+    "writeback",
+    "checkpoint",
+    "skip_reason",
+    "scope_selected",
+    "classification_selected",
+]
+PolicyMode = Literal["guided", "required", "required_with_skip_reason"]
+PolicyDecisionKind = Literal["allow", "allow_with_recommendation", "require_action", "block"]
+ScopeStrategy = Literal["repo", "workspace", "session", "task"]
 
 
 # ---------------------------------------------------------------------------
@@ -119,6 +138,31 @@ class OptimizeRequest:
 
     prune: bool = False
     older_than_days: int = 30
+
+
+@dataclass(frozen=True)
+class PolicyCheckRequest:
+    """Parameters for the ``policy check`` and ``policy explain`` commands."""
+
+    trigger: PolicyTrigger
+    workflow_key: str | None = None
+    host: str | None = None
+    task_kind: str | None = None
+    scope: str | None = None
+    paths: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class PolicyRecordRequest:
+    """Parameters for the ``policy record`` command."""
+
+    workflow_key: str
+    action: PolicyAction
+    reason: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.action == "skip_reason" and (self.reason is None or not self.reason.strip()):
+            raise ValueError("Provide 'reason' when recording action 'skip_reason'.")
 
 
 # ---------------------------------------------------------------------------
@@ -329,6 +373,86 @@ class OptimizeRetentionResult:
             minimum_age_days=data["minimum_age_days"],
             delete_unverified=data["delete_unverified"],
             error_if_tagged_old_versions=data["error_if_tagged_old_versions"],
+        )
+
+
+@dataclass(frozen=True)
+class StatusResult:
+    """Flat status result returned by status-style commands."""
+
+    command: str
+    status: str
+    message: str
+    path: str | None
+    schema_version: int | None
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "StatusResult":
+        return cls(
+            command=data["command"],
+            status=data["status"],
+            message=data["message"],
+            path=data.get("path"),
+            schema_version=data.get("schema_version"),
+        )
+
+
+@dataclass(frozen=True)
+class PolicyRuleEvaluation:
+    """Evaluation details for one matched policy rule."""
+
+    id: str
+    mode: PolicyMode
+    satisfied: bool
+    skipped_via_reason: bool
+    required_actions: list[PolicyAction]
+    missing_actions: list[PolicyAction]
+    reasons: list[str]
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "PolicyRuleEvaluation":
+        return cls(
+            id=data["id"],
+            mode=data["mode"],
+            satisfied=data["satisfied"],
+            skipped_via_reason=data["skipped_via_reason"],
+            required_actions=list(data.get("required_actions", [])),
+            missing_actions=list(data.get("missing_actions", [])),
+            reasons=list(data.get("reasons", [])),
+        )
+
+
+@dataclass(frozen=True)
+class PolicyDecisionResult:
+    """Structured result for ``policy check`` and ``policy explain``."""
+
+    command: str
+    action: str
+    trigger: PolicyTrigger
+    workflow_key: str | None
+    decision: PolicyDecisionKind
+    scope_strategy: ScopeStrategy
+    matched_rules: list[PolicyRuleEvaluation]
+    required_actions: list[PolicyAction]
+    missing_actions: list[PolicyAction]
+    reasons: list[str]
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "PolicyDecisionResult":
+        return cls(
+            command=data["command"],
+            action=data["action"],
+            trigger=data["trigger"],
+            workflow_key=data.get("workflow_key"),
+            decision=data["decision"],
+            scope_strategy=data["scope_strategy"],
+            matched_rules=[
+                PolicyRuleEvaluation.from_dict(item)
+                for item in data.get("matched_rules", [])
+            ],
+            required_actions=list(data.get("required_actions", [])),
+            missing_actions=list(data.get("missing_actions", [])),
+            reasons=list(data.get("reasons", [])),
         )
 
 

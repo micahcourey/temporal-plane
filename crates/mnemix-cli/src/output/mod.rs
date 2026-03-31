@@ -2,8 +2,9 @@ use std::{collections::BTreeMap, time::SystemTime};
 
 use humantime::format_rfc3339;
 use mnemix_core::{
-    Checkpoint, DisclosureDepth, MemoryRecord, PinState, RecallEntry, RecallLayer, RecallReason,
-    StatsSnapshot, VersionRecord, memory::MemoryKind,
+    Checkpoint, DisclosureDepth, MemoryRecord, PinState, PolicyAction, PolicyDecision,
+    PolicyRuleEvaluation, RecallEntry, RecallLayer, RecallReason, StatsSnapshot, VersionRecord,
+    memory::MemoryKind,
 };
 use serde::Serialize;
 
@@ -28,6 +29,7 @@ pub(crate) enum CommandOutput {
     Memory(Box<MemoryResultView>),
     MemoryList(Box<MemoryListView>),
     Recall(Box<RecallResultView>),
+    Policy(Box<PolicyDecisionView>),
     Checkpoint(Box<CheckpointResultView>),
     VersionList(Box<VersionListView>),
     Restore(Box<RestoreResultView>),
@@ -94,6 +96,31 @@ pub(crate) struct RecallResultView {
     pub(crate) pinned_context: Vec<RecallEntryView>,
     pub(crate) summaries: Vec<RecallEntryView>,
     pub(crate) archival: Vec<RecallEntryView>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub(crate) struct PolicyDecisionView {
+    pub(crate) command: &'static str,
+    pub(crate) action: &'static str,
+    pub(crate) trigger: String,
+    pub(crate) workflow_key: Option<String>,
+    pub(crate) decision: &'static str,
+    pub(crate) scope_strategy: &'static str,
+    pub(crate) matched_rules: Vec<PolicyRuleEvaluationView>,
+    pub(crate) required_actions: Vec<&'static str>,
+    pub(crate) missing_actions: Vec<&'static str>,
+    pub(crate) reasons: Vec<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub(crate) struct PolicyRuleEvaluationView {
+    pub(crate) id: String,
+    pub(crate) mode: &'static str,
+    pub(crate) satisfied: bool,
+    pub(crate) skipped_via_reason: bool,
+    pub(crate) required_actions: Vec<&'static str>,
+    pub(crate) missing_actions: Vec<&'static str>,
+    pub(crate) reasons: Vec<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -321,6 +348,62 @@ pub(crate) fn recall_entry_view(entry: &RecallEntry) -> RecallEntryView {
             .map(recall_reason_name)
             .collect(),
         memory: memory_summary_view(entry.memory()),
+    }
+}
+
+pub(crate) fn policy_decision_view(
+    action: &'static str,
+    trigger: String,
+    workflow_key: Option<String>,
+    decision: &PolicyDecision,
+) -> PolicyDecisionView {
+    PolicyDecisionView {
+        command: "policy",
+        action,
+        trigger,
+        workflow_key,
+        decision: decision.kind.as_str(),
+        scope_strategy: decision.scope_strategy.as_str(),
+        matched_rules: decision
+            .matched_rules
+            .iter()
+            .map(policy_rule_evaluation_view)
+            .collect(),
+        required_actions: decision
+            .required_actions
+            .iter()
+            .copied()
+            .map(PolicyAction::as_str)
+            .collect(),
+        missing_actions: decision
+            .missing_actions
+            .iter()
+            .copied()
+            .map(PolicyAction::as_str)
+            .collect(),
+        reasons: decision.reasons.clone(),
+    }
+}
+
+fn policy_rule_evaluation_view(rule: &PolicyRuleEvaluation) -> PolicyRuleEvaluationView {
+    PolicyRuleEvaluationView {
+        id: rule.id.clone(),
+        mode: rule.mode.as_str(),
+        satisfied: rule.satisfied,
+        skipped_via_reason: rule.skipped_via_reason,
+        required_actions: rule
+            .required_actions
+            .iter()
+            .copied()
+            .map(PolicyAction::as_str)
+            .collect(),
+        missing_actions: rule
+            .missing_actions
+            .iter()
+            .copied()
+            .map(PolicyAction::as_str)
+            .collect(),
+        reasons: rule.reasons.clone(),
     }
 }
 

@@ -2,8 +2,8 @@ use std::path::PathBuf;
 
 use clap::{ArgGroup, Parser, Subcommand, ValueEnum};
 use mnemix_core::{
-    CheckpointName, DisclosureDepth, EntityName, MemoryId, ScopeId, SessionId, SourceRef, TagName,
-    ToolName,
+    CheckpointName, DisclosureDepth, EntityName, MemoryId, PolicyAction, PolicyTrigger, ScopeId,
+    SessionId, SourceRef, TagName, ToolName,
 };
 
 use crate::output::OutputFormat;
@@ -52,6 +52,53 @@ pub(crate) enum Command {
     Stats(StatsArgs),
     Export(ExportArgs),
     Import(ImportArgs),
+    Policy(PolicyArgs),
+}
+
+#[derive(clap::Args, Debug)]
+pub(crate) struct PolicyArgs {
+    #[command(subcommand)]
+    pub(crate) command: PolicyCommand,
+}
+
+#[derive(Subcommand, Debug)]
+pub(crate) enum PolicyCommand {
+    Check(PolicyCheckArgs),
+    Explain(PolicyCheckArgs),
+    Record(PolicyRecordArgs),
+}
+
+#[derive(clap::Args, Debug)]
+pub(crate) struct PolicyCheckArgs {
+    #[arg(long, value_parser = parse_policy_trigger)]
+    pub(crate) trigger: PolicyTrigger,
+
+    #[arg(long)]
+    pub(crate) workflow_key: Option<String>,
+
+    #[arg(long)]
+    pub(crate) host: Option<String>,
+
+    #[arg(long)]
+    pub(crate) task_kind: Option<String>,
+
+    #[arg(long, value_parser = parse_scope_id)]
+    pub(crate) scope: Option<ScopeId>,
+
+    #[arg(long = "path")]
+    pub(crate) path: Vec<String>,
+}
+
+#[derive(clap::Args, Debug)]
+pub(crate) struct PolicyRecordArgs {
+    #[arg(long)]
+    pub(crate) workflow_key: String,
+
+    #[arg(long, value_parser = parse_policy_action)]
+    pub(crate) action: PolicyAction,
+
+    #[arg(long)]
+    pub(crate) reason: Option<String>,
 }
 
 #[derive(clap::Args, Debug)]
@@ -306,6 +353,14 @@ fn parse_metadata_entry(value: &str) -> Result<MetadataEntry, String> {
         key: trimmed_key.to_owned(),
         value: trimmed_value.to_owned(),
     })
+}
+
+fn parse_policy_trigger(value: &str) -> Result<PolicyTrigger, String> {
+    value.parse()
+}
+
+fn parse_policy_action(value: &str) -> Result<PolicyAction, String> {
+    value.parse()
 }
 
 #[cfg(test)]

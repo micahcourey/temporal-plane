@@ -17,6 +17,8 @@ from mnemix.errors import MnemixCommandError
 from mnemix.models import (
     CheckpointRequest,
     OptimizeRequest,
+    PolicyCheckRequest,
+    PolicyRecordRequest,
     RecallRequest,
     RememberRequest,
     RestoreRequest,
@@ -393,6 +395,86 @@ class TestStats:
             result = tp.stats()
         assert result.total_memories == 10
         assert result.latest_checkpoint == "cp-1"
+
+
+# ---------------------------------------------------------------------------
+# policy
+# ---------------------------------------------------------------------------
+
+
+class TestPolicy:
+    def test_policy_check_returns_typed_result(self, tp: Mnemix) -> None:
+        with patch("mnemix._runner.run") as mock_run:
+            mock_run.return_value = {
+                "command": "policy",
+                "action": "check",
+                "trigger": "on_git_commit",
+                "workflow_key": "wf-1",
+                "decision": "block",
+                "scope_strategy": "repo",
+                "matched_rules": [
+                    {
+                        "id": "commit-writeback",
+                        "mode": "required_with_skip_reason",
+                        "satisfied": False,
+                        "skipped_via_reason": False,
+                        "required_actions": ["writeback"],
+                        "missing_actions": ["writeback"],
+                        "reasons": ["Rule `commit-writeback` is missing: writeback."],
+                    }
+                ],
+                "required_actions": ["writeback"],
+                "missing_actions": ["writeback"],
+                "reasons": ["Rule `commit-writeback` is missing: writeback."],
+            }
+            result = tp.policy_check(
+                PolicyCheckRequest(
+                    trigger="on_git_commit",
+                    workflow_key="wf-1",
+                    host="coding-agent",
+                    paths=["adapters/coding_agent_adapter.py"],
+                )
+            )
+        assert result.decision == "block"
+        args = mock_run.call_args[0][2]
+        assert args[:2] == ["check", "--trigger"]
+        assert "--workflow-key" in args
+        assert "--host" in args
+        assert "--path" in args
+
+    def test_policy_explain_uses_explain_action(self, tp: Mnemix) -> None:
+        with patch("mnemix._runner.run") as mock_run:
+            mock_run.return_value = {
+                "command": "policy",
+                "action": "explain",
+                "trigger": "on_git_commit",
+                "workflow_key": None,
+                "decision": "allow",
+                "scope_strategy": "repo",
+                "matched_rules": [],
+                "required_actions": [],
+                "missing_actions": [],
+                "reasons": ["No policy rules matched this workflow context."],
+            }
+            tp.policy_explain(PolicyCheckRequest(trigger="on_git_commit"))
+        assert mock_run.call_args[0][1] == "policy"
+        assert mock_run.call_args[0][2][0] == "explain"
+
+    def test_policy_record_returns_status(self, tp: Mnemix) -> None:
+        with patch("mnemix._runner.run") as mock_run:
+            mock_run.return_value = {
+                "command": "policy",
+                "status": "recorded",
+                "message": "Recorded `writeback` for workflow `wf-1`",
+                "path": "/tmp/test-store",
+                "schema_version": None,
+            }
+            result = tp.policy_record(
+                PolicyRecordRequest(workflow_key="wf-1", action="writeback")
+            )
+        assert result.status == "recorded"
+        args = mock_run.call_args[0][2]
+        assert args == ["record", "--workflow-key", "wf-1", "--action", "writeback"]
 
 
 # ---------------------------------------------------------------------------
