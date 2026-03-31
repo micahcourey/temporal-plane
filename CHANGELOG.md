@@ -6,10 +6,26 @@ The format is inspired by Keep a Changelog and semantic versioning.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-03-31
+
+### Added
+
+- **Human memory-browser TUI** — added `mnemix ui` for keyboard-first browsing of recent memories, pinned memories, and text search results, including explicit `from` / `to` date filters and detail inspection.
+- **Shared browse contract** — promoted recent and pinned list behavior behind a storage-agnostic `BrowseBackend` trait in `mnemix-core` and implemented it in the LanceDB backend.
+- **Initial policy runner surface** — added the first policy evaluation and recording flow for release-safe and workflow-safe enforcement surfaces.
+- **Host adapter and install documentation** — expanded host-specific adapter guidance, coding adapter policy docs, and pipx installation coverage for the Python package and CLI aliases.
+
+### Changed
+
+- **Workflow naming** — replaced `dex` references with `mnemix-workflow` across workflow planning and execution surfaces.
+- **Public docs and website content** — refreshed README links, installation guidance, architecture navigation, ecosystem messaging, and website layout polish.
+
 ### Fixed
 
 - Release preparation now installs `protoc` in the tag-triggered workflow so release builds match CI and bundled-wheel publish jobs.
 - Release notes and release checklist coverage now include the recurring Git and GitHub release commands used for recovery and normal publishes.
+- Cleared the `lz4` advisory from the Rust dependency graph lockfile.
+- Fixed architecture diagram mobile overflow and related website footer refinements.
 
 ## [0.1.0] - 2026-03-09
 
