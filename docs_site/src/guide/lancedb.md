@@ -2,7 +2,7 @@
 
 Mnemix uses LanceDB and Lance as its storage foundation.
 
-This pairing gives the project a local-first data layer with built-in version history, efficient columnar storage, and a clear path for inspection, restore, and future advanced workflows.
+This pairing gives the project a local-first data layer with built-in version history, efficient columnar storage, full-text retrieval, and a clear path for optional vector-aware workflows.
 
 ## Why LanceDB fits Mnemix
 
@@ -34,6 +34,7 @@ The current storage design supports:
 - local filesystem-backed stores
 - append and update workflows for memory records
 - full-text retrieval
+- persisted embedding storage for vector-enabled stores
 - version inspection
 - named checkpoints
 - restore to historical state as a new head
@@ -52,6 +53,18 @@ Mnemix is built around the idea that an agent's memory store should live close t
 
 That default keeps the system simple to adopt and easy to inspect. A user can initialize a store, write memories, inspect results, and restore history without setting up remote infrastructure.
 
+## Vector-ready by design
+
+The storage layer now also carries store-level vector configuration and persisted embeddings.
+
+That gives Mnemix a few useful properties:
+
+- vector state can travel with the store during export and staged import
+- semantic or hybrid retrieval can be enabled without redefining the memory model
+- future vector indexing work can build on persisted embedding data already stored locally
+
+The public mental model is still "memories, recall, search, checkpoints, restore." Vector support is an optional extension of that same store contract, not a separate product mode.
+
 ## Boundaries that matter
 
 The storage engine is an implementation detail, but a deliberate one.
@@ -67,4 +80,4 @@ From a project perspective, the important boundary is that storage-specific conc
 
 ## What this page is not
 
-This page is intentionally product-focused. It does not document storage SDK internals or implementation-language APIs. Those details are useful during implementation, but they are not part of the public documentation set.
+This page is intentionally product-focused. It does not document storage SDK internals or implementation-language APIs. Those details are useful during implementation, but they are not part of the public documentation set. For the user-facing vector workflow, see [Vector Retrieval](/guide/vector-retrieval).

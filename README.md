@@ -96,6 +96,7 @@ This **progressive disclosure** pattern means you never flood an agent's context
 - **Checkpoints** — named, human-readable stable points in the version history
 - **Time-travel restore** — restore the store to any prior version or checkpoint as a new head state
 - **Import / export** — portable store archives
+- **Optional vector retrieval foundation** — persisted embedding settings, coverage inspection, and backend support for semantic and hybrid retrieval
 - **Store optimization** — compact and prune old data with safety checkpoints built in
 - **Human-readable CLI** — inspect the full store state from the terminal
 - **Python client** — typed, thin wrapper for use in Python agents and scripts
@@ -157,6 +158,12 @@ mnemix --store .mnemix recall --scope my-project
 mnemix --store .mnemix search --text "storage decision" --scope my-project
 ```
 
+### Inspect optional vector settings
+
+```bash
+mnemix --store .mnemix vectors show
+```
+
 ### Browse interactively
 
 ```bash
@@ -176,6 +183,29 @@ mnemix --store .mnemix checkpoint \
 ```bash
 mnemix --store .mnemix restore --checkpoint before-refactor
 ```
+
+---
+
+## Optional vector retrieval
+
+Mnemix works out of the box with lexical search and layered recall. Vector support is optional and store-scoped: you can persist embedding settings, inspect coverage, and prepare a store for semantic or hybrid retrieval without changing the default workflow.
+
+```bash
+# Persist store-level vector settings
+mnemix --store .mnemix vectors enable \
+  --model my-embedding-model \
+  --dimensions 1536
+
+# Inspect current vector status and coverage
+mnemix --store .mnemix vectors show
+
+# Plan which memories still need embeddings
+mnemix --store .mnemix vectors backfill
+```
+
+Today, the shipped CLI exposes vector configuration and status, but not end-to-end embedding execution. `vectors backfill` is a dry-run planner, and `vectors backfill --apply` intentionally returns an unsupported error because the CLI binary does not yet wire in an embedding provider. Likewise, CLI `search` and `recall` remain lexical today even though the LanceDB backend now supports semantic-only and hybrid retrieval when opened with an embedding provider.
+
+Vector state is preserved during export and staged import, so portable archives and import-review flows do not silently drop persisted embeddings or vector configuration.
 
 ---
 

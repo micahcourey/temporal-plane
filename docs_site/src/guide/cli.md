@@ -13,6 +13,7 @@ mnemix [--store PATH] [--json] <command>
 
 Available commands:
 
+- `ui`
 - `init`
 - `remember`
 - `recall`
@@ -24,9 +25,11 @@ Available commands:
 - `versions`
 - `restore`
 - `optimize`
+- `vectors`
 - `stats`
 - `export`
 - `import`
+- `policy`
 
 The default store path is `.mnemix`.
 
@@ -76,6 +79,8 @@ mnemix --store .mnemix search \
   --limit 10
 ```
 
+The current CLI search surface is lexical. Store-level vector readiness is configured separately through the `vectors` command group.
+
 ### Inspect a single memory
 
 ```bash
@@ -124,6 +129,39 @@ mnemix --store .mnemix restore --version 12
 mnemix --store .mnemix stats --scope repo:mnemix
 ```
 
+### Inspect vector status
+
+```bash
+mnemix --store .mnemix vectors show
+```
+
+This reports whether vectors are enabled, whether the current runtime can embed new writes, embedding coverage, and whether the store is ready for a future LanceDB-native vector index.
+
+### Enable vector settings
+
+```bash
+mnemix --store .mnemix vectors enable \
+  --model my-embedding-model \
+  --dimensions 1536
+```
+
+To persist the intent to embed new writes automatically when a provider is available:
+
+```bash
+mnemix --store .mnemix vectors enable \
+  --model my-embedding-model \
+  --dimensions 1536 \
+  --auto-embed-on-write
+```
+
+### Plan embedding backfill
+
+```bash
+mnemix --store .mnemix vectors backfill
+```
+
+This is currently a dry-run planner. The shipped CLI does not wire in an embedding provider, so `mnemix vectors backfill --apply` returns an explicit unsupported error instead of attempting a partial backfill.
+
 ### Optimize the store
 
 ```bash
@@ -148,7 +186,7 @@ mnemix --store .mnemix export --destination ./backups/mnemix-export
 mnemix --store .mnemix import --source ./backups/mnemix-export
 ```
 
-Imports are staged onto an isolated branch so the current main store remains unchanged until the staged data is reviewed.
+Imports are staged onto an isolated branch so the current main store remains unchanged until the staged data is reviewed. Export and staged import preserve vector settings and persisted embeddings when they are present in the source store.
 
 ## Interactive UI
 
@@ -188,4 +226,7 @@ Successful commands return structured data under a `kind` and `data` envelope. F
 - `checkpoint` creates a stable, human-readable reference to the current version.
 - `restore` always requires exactly one target: `--checkpoint` or `--version`.
 - `optimize` is conservative by default and only prunes old versions when `--prune` is set.
+- `search` and `recall` remain lexical in the shipped CLI even when a store is vector-enabled.
+- `vectors show` is the main inspection command for vector readiness, coverage, and provider availability.
+- `vectors backfill` plans missing embeddings only; `--apply` is intentionally unsupported in the current CLI binary.
 - `remember` supports tags, entities, metadata, and source attribution fields for richer recall and inspection.

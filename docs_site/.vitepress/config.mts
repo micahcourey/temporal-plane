@@ -35,6 +35,7 @@ export default withMermaid(defineConfig({
                     items: [
                         { text: 'Overview', link: '/guide/' },
                         { text: 'CLI', link: '/guide/cli' },
+                        { text: 'Vector Retrieval', link: '/guide/vector-retrieval' },
                         { text: 'Python', link: '/guide/python' },
                         { text: 'Host Adapters', link: '/guide/host-adapters' },
                         { text: 'Policy Runner', link: '/guide/policy-runner' },

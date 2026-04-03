@@ -14,6 +14,7 @@ The project is built around three ideas:
 - typed memory records for observations, decisions, preferences, facts, procedures, and summaries
 - layered recall with pinned context, summaries, and archival expansion
 - full-text search across stored memories
+- optional vector-ready persisted embeddings for semantic and hybrid retrieval backends
 - checkpoints and version history for recovery
 - a terminal-first CLI with optional JSON output
 - a thin Python client built on the CLI contract
@@ -91,6 +92,7 @@ mnemix --store .mnemix search --text "persistent agent memory" --scope repo:mnem
 ## Interfaces
 
 - The [CLI](/guide/cli) is the primary user-facing interface.
+- The [Vector Retrieval](/guide/vector-retrieval) page explains the optional vector layer, coverage reporting, and current CLI limits.
 - The [Python client](/guide/python) wraps the CLI's `--json` contract.
 - The [Host Adapters](/guide/host-adapters) page shows how to shape recall and writeback for coding, chat, CI, and review workflows.
 - The [Policy Runner](/guide/policy-runner) page shows how to combine guided memory usage with required workflow checkpoints.
@@ -106,5 +108,6 @@ generation of AI coding resources, see
 ## Next steps
 
 - Read [Memory Model](/guide/memory-model) for the shape of stored records.
+- Read [Vector Retrieval](/guide/vector-retrieval) for store-level vector settings and semantic retrieval readiness.
 - Read [Versioning & Restore](/guide/versioning-and-restore) for recovery semantics.
 - Read [Checkpoint & Retention Policy](/guide/checkpoint-and-retention-policy) for safety defaults.
