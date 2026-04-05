@@ -8,6 +8,6 @@ pub mod backend;
 
 pub use backend::{
     EmbeddingBackfillRequest, EmbeddingBackfillResult, EmbeddingProvider, EmbeddingProviderError,
-    LanceDbBackend, LanceDbError, LanceDbOpenOptions, VectorEnableRequest, VectorIndexStatus,
-    VectorSettings, VectorStatus,
+    LanceDbBackend, LanceDbError, LanceDbOpenOptions, SearchMatch, VectorEnableRequest,
+    VectorIndexStatus, VectorSettings, VectorStatus,
 };

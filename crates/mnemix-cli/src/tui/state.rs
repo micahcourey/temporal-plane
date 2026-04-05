@@ -1,8 +1,14 @@
-use super::data::{BrowseMode, BrowserData, MemoryEntry, ScopeOption, matches_date_range};
+use mnemix_core::RetrievalMode;
+
+use super::data::{
+    BrowseMode, BrowserData, MemoryEntry, RETRIEVAL_MODES, ScopeOption, VectorSummary,
+    matches_date_range, retrieval_mode_label,
+};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum FocusPane {
     Modes,
+    Retrieval,
     Scopes,
     Results,
     Detail,
@@ -34,8 +40,10 @@ pub(crate) struct SearchFilters {
 
 pub(crate) struct AppState {
     data: BrowserData,
+    vector_summary: VectorSummary,
     search_results: Vec<MemoryEntry>,
     selected_mode: usize,
+    selected_retrieval_mode: usize,
     selected_scope: usize,
     selected_result: usize,
     scroll: u16,
@@ -47,11 +55,13 @@ pub(crate) struct AppState {
 }
 
 impl AppState {
-    pub(crate) fn new(data: BrowserData) -> Self {
+    pub(crate) fn new(data: BrowserData, vector_summary: VectorSummary) -> Self {
         Self {
             data,
+            vector_summary,
             search_results: Vec::new(),
             selected_mode: 0,
+            selected_retrieval_mode: 0,
             selected_scope: 0,
             selected_result: 0,
             scroll: 0,
@@ -75,8 +85,38 @@ impl AppState {
         &BrowseMode::ALL
     }
 
+    pub(crate) fn retrieval_mode_options() -> &'static [RetrievalMode] {
+        &RETRIEVAL_MODES
+    }
+
     pub(crate) fn scopes(&self) -> &[ScopeOption] {
         self.data.scopes()
+    }
+
+    pub(crate) fn vector_summary(&self) -> &VectorSummary {
+        &self.vector_summary
+    }
+
+    pub(crate) fn set_vector_summary(&mut self, vector_summary: VectorSummary) {
+        self.vector_summary = vector_summary;
+    }
+
+    pub(crate) fn selected_retrieval_mode(&self) -> RetrievalMode {
+        RETRIEVAL_MODES[self.selected_retrieval_mode]
+    }
+
+    pub(crate) fn selected_retrieval_mode_label(&self) -> &'static str {
+        retrieval_mode_label(self.selected_retrieval_mode())
+    }
+
+    pub(crate) fn selected_retrieval_mode_supported(&self) -> bool {
+        self.vector_summary
+            .supports_mode(self.selected_retrieval_mode())
+    }
+
+    pub(crate) fn selected_retrieval_mode_unavailable_reason(&self) -> Option<String> {
+        self.vector_summary
+            .unavailable_reason(self.selected_retrieval_mode())
     }
 
     pub(crate) fn search_filters(&self) -> &SearchFilters {
@@ -144,7 +184,8 @@ impl AppState {
 
     pub(crate) fn set_focus_next(&mut self) {
         self.focus = match self.focus {
-            FocusPane::Modes => FocusPane::Scopes,
+            FocusPane::Modes => FocusPane::Retrieval,
+            FocusPane::Retrieval => FocusPane::Scopes,
             FocusPane::Scopes => FocusPane::Results,
             FocusPane::Results => FocusPane::Detail,
             FocusPane::Detail => FocusPane::Modes,
@@ -154,7 +195,8 @@ impl AppState {
     pub(crate) fn set_focus_previous(&mut self) {
         self.focus = match self.focus {
             FocusPane::Modes => FocusPane::Detail,
-            FocusPane::Scopes => FocusPane::Modes,
+            FocusPane::Retrieval => FocusPane::Modes,
+            FocusPane::Scopes => FocusPane::Retrieval,
             FocusPane::Results => FocusPane::Scopes,
             FocusPane::Detail => FocusPane::Results,
         };
@@ -173,6 +215,21 @@ impl AppState {
             (self.selected_mode + BrowseMode::ALL.len() - 1) % BrowseMode::ALL.len();
         self.reset_result_selection();
         previous != self.selected_mode()
+    }
+
+    pub(crate) fn next_retrieval_mode(&mut self) -> bool {
+        let previous = self.selected_retrieval_mode();
+        self.selected_retrieval_mode = (self.selected_retrieval_mode + 1) % RETRIEVAL_MODES.len();
+        self.reset_result_selection();
+        previous != self.selected_retrieval_mode()
+    }
+
+    pub(crate) fn previous_retrieval_mode(&mut self) -> bool {
+        let previous = self.selected_retrieval_mode();
+        self.selected_retrieval_mode =
+            (self.selected_retrieval_mode + RETRIEVAL_MODES.len() - 1) % RETRIEVAL_MODES.len();
+        self.reset_result_selection();
+        previous != self.selected_retrieval_mode()
     }
 
     pub(crate) fn next_scope(&mut self) -> bool {
@@ -274,6 +331,10 @@ impl AppState {
         self.selected_mode
     }
 
+    pub(crate) fn selected_retrieval_mode_index(&self) -> usize {
+        self.selected_retrieval_mode
+    }
+
     pub(crate) fn search_query_is_empty(&self) -> bool {
         self.search_filters.query.is_empty()
     }
@@ -289,7 +350,7 @@ mod tests {
     use mnemix_core::{MemoryId, MemoryRecord, RecordedAt, ScopeId, memory::MemoryKind};
 
     use super::{AppState, BrowserData, FocusPane, InputField};
-    use crate::tui::data::{MemoryEntry, ScopeOption};
+    use crate::tui::data::{MemoryEntry, ScopeOption, VectorSummary};
 
     fn memory(scope: &str, updated_at: std::time::SystemTime) -> MemoryEntry {
         let record = MemoryRecord::builder(
@@ -330,20 +391,22 @@ mod tests {
     }
 
     #[test]
-    fn focus_cycles_across_four_panes() {
-        let mut state = AppState::new(data());
+    fn focus_cycles_across_five_panes() {
+        let mut state = AppState::new(data(), VectorSummary::from_parts(false, false, false));
         assert_eq!(state.focus(), FocusPane::Results);
         state.set_focus_next();
         assert_eq!(state.focus(), FocusPane::Detail);
         state.set_focus_next();
         assert_eq!(state.focus(), FocusPane::Modes);
+        state.set_focus_next();
+        assert_eq!(state.focus(), FocusPane::Retrieval);
         state.set_focus_previous();
-        assert_eq!(state.focus(), FocusPane::Detail);
+        assert_eq!(state.focus(), FocusPane::Modes);
     }
 
     #[test]
     fn search_date_filters_reduce_visible_results() {
-        let mut state = AppState::new(data());
+        let mut state = AppState::new(data(), VectorSummary::from_parts(false, false, false));
         state.next_mode();
         state.next_mode();
         state.set_search_results(vec![
@@ -363,5 +426,33 @@ mod tests {
         let _ = state.commit_input();
 
         assert_eq!(state.result_count(), 1);
+    }
+
+    #[test]
+    fn retrieval_mode_support_uses_vector_summary() {
+        let mut state = AppState::new(data(), VectorSummary::from_parts(true, false, false));
+        assert_eq!(state.selected_retrieval_mode_label(), "Lexical");
+        assert!(state.selected_retrieval_mode_supported());
+
+        state.next_retrieval_mode();
+        assert_eq!(state.selected_retrieval_mode_label(), "Semantic");
+        assert!(!state.selected_retrieval_mode_supported());
+        assert!(
+            state
+                .selected_retrieval_mode_unavailable_reason()
+                .expect("reason")
+                .contains("embedding provider")
+        );
+    }
+
+    #[test]
+    fn vector_summary_can_be_reloaded_in_state() {
+        let mut state = AppState::new(data(), VectorSummary::from_parts(true, false, false));
+        state.next_retrieval_mode();
+        assert!(!state.selected_retrieval_mode_supported());
+
+        state.set_vector_summary(VectorSummary::from_parts(true, true, true));
+
+        assert!(state.selected_retrieval_mode_supported());
     }
 }

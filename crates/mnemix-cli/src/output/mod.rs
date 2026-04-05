@@ -3,8 +3,8 @@ use std::{collections::BTreeMap, time::SystemTime};
 use humantime::format_rfc3339;
 use mnemix_core::{
     Checkpoint, DisclosureDepth, MemoryRecord, PinState, PolicyAction, PolicyDecision,
-    PolicyRuleEvaluation, RecallEntry, RecallLayer, RecallReason, StatsSnapshot, VersionRecord,
-    memory::MemoryKind,
+    PolicyRuleEvaluation, RecallEntry, RecallLayer, RecallReason, RetrievalMode, StatsSnapshot,
+    VersionRecord, memory::MemoryKind,
 };
 use serde::Serialize;
 
@@ -26,6 +26,8 @@ pub(crate) enum OutputFormat {
 #[serde(tag = "kind", content = "data", rename_all = "snake_case")]
 pub(crate) enum CommandOutput {
     Status(Box<StatusView>),
+    ProviderProfile(Box<ProviderProfileResultView>),
+    ProviderProfileList(Box<ProviderProfileListView>),
     Memory(Box<MemoryResultView>),
     MemoryList(Box<MemoryListView>),
     Recall(Box<RecallResultView>),
@@ -47,6 +49,32 @@ pub(crate) struct StatusView {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub(crate) struct ProviderProfileResultView {
+    pub(crate) command: &'static str,
+    pub(crate) action: &'static str,
+    pub(crate) config_path: String,
+    pub(crate) profile: ProviderProfileView,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub(crate) struct ProviderProfileListView {
+    pub(crate) command: &'static str,
+    pub(crate) count: usize,
+    pub(crate) config_path: String,
+    pub(crate) profiles: Vec<ProviderProfileView>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub(crate) struct ProviderProfileView {
+    pub(crate) name: String,
+    pub(crate) kind: &'static str,
+    pub(crate) model: String,
+    pub(crate) endpoint: String,
+    pub(crate) api_key_source: Option<String>,
+    pub(crate) auth_token_source: Option<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub(crate) struct MemoryResultView {
     pub(crate) command: &'static str,
     pub(crate) action: &'static str,
@@ -58,6 +86,8 @@ pub(crate) struct MemoryListView {
     pub(crate) command: &'static str,
     pub(crate) scope: Option<String>,
     pub(crate) query_text: Option<String>,
+    pub(crate) retrieval_mode: Option<&'static str>,
+    pub(crate) provider: Option<String>,
     pub(crate) count: usize,
     pub(crate) memories: Vec<MemorySummaryView>,
 }
@@ -92,6 +122,8 @@ pub(crate) struct RecallResultView {
     pub(crate) scope: Option<String>,
     pub(crate) query_text: Option<String>,
     pub(crate) disclosure_depth: &'static str,
+    pub(crate) retrieval_mode: &'static str,
+    pub(crate) provider: Option<String>,
     pub(crate) count: usize,
     pub(crate) pinned_context: Vec<RecallEntryView>,
     pub(crate) summaries: Vec<RecallEntryView>,
@@ -177,8 +209,17 @@ pub(crate) struct MemorySummaryView {
     pub(crate) confidence: u8,
     pub(crate) created_at: String,
     pub(crate) updated_at: String,
+    pub(crate) search_match: Option<SearchMatchView>,
     pub(crate) tags: Vec<String>,
     pub(crate) entities: Vec<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub(crate) struct SearchMatchView {
+    pub(crate) kind: &'static str,
+    pub(crate) lexical: bool,
+    pub(crate) semantic: bool,
+    pub(crate) semantic_score: Option<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -315,6 +356,7 @@ pub(crate) fn memory_summary_view(record: &MemoryRecord) -> MemorySummaryView {
         confidence: record.confidence().value(),
         created_at: format_timestamp(record.created_at().value()),
         updated_at: format_timestamp(record.updated_at().value()),
+        search_match: None,
         tags: record
             .tags()
             .iter()
@@ -444,6 +486,14 @@ pub(crate) const fn disclosure_depth_name(depth: DisclosureDepth) -> &'static st
         DisclosureDepth::SummaryOnly => "summary_only",
         DisclosureDepth::SummaryThenPinned => "summary_then_pinned",
         DisclosureDepth::Full => "full",
+    }
+}
+
+pub(crate) const fn retrieval_mode_name(mode: RetrievalMode) -> &'static str {
+    match mode {
+        RetrievalMode::LexicalOnly => "lexical",
+        RetrievalMode::SemanticOnly => "semantic",
+        RetrievalMode::Hybrid => "hybrid",
     }
 }
 

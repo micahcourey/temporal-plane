@@ -577,6 +577,59 @@ struct MatchSignals {
     semantic: bool,
 }
 
+/// A search result with lightweight retrieval provenance for operator-facing
+/// surfaces such as the TUI.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SearchMatch {
+    record: MemoryRecord,
+    lexical_match: bool,
+    semantic_match: bool,
+    semantic_score: Option<f32>,
+}
+
+impl SearchMatch {
+    fn from_ranked_candidate(candidate: RankedMemoryRecord, text_present: bool) -> Self {
+        // Query-free search paths can still produce ranked candidates, but we only surface
+        // lexical or semantic provenance when actual query text was present.
+        Self {
+            lexical_match: candidate.lexical_rank.is_some() && text_present,
+            semantic_match: candidate.semantic_rank.is_some() && text_present,
+            semantic_score: candidate.semantic_score,
+            record: candidate.record,
+        }
+    }
+
+    /// Returns the surfaced memory record.
+    #[must_use]
+    pub const fn record(&self) -> &MemoryRecord {
+        &self.record
+    }
+
+    /// Returns the surfaced memory record by value.
+    #[must_use]
+    pub fn into_record(self) -> MemoryRecord {
+        self.record
+    }
+
+    /// Returns `true` when lexical ranking contributed to this result.
+    #[must_use]
+    pub const fn lexical_match(&self) -> bool {
+        self.lexical_match
+    }
+
+    /// Returns `true` when semantic ranking contributed to this result.
+    #[must_use]
+    pub const fn semantic_match(&self) -> bool {
+        self.semantic_match
+    }
+
+    /// Returns the semantic score when one was available.
+    #[must_use]
+    pub const fn semantic_score(&self) -> Option<f32> {
+        self.semantic_score
+    }
+}
+
 impl std::fmt::Debug for LanceDbBackend {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("LanceDbBackend")
@@ -708,6 +761,22 @@ impl LanceDbBackend {
             embedded_memories,
             vector_index: self.vector_index_status(),
         })
+    }
+
+    /// Returns search results with lightweight retrieval provenance.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LanceDbError`] when the search cannot be executed for the
+    /// selected retrieval mode.
+    pub fn search_matches(&self, query: &SearchQuery) -> Result<Vec<SearchMatch>, LanceDbError> {
+        let text_present = !query.text().is_empty();
+        let ranked = self.ranked_search_candidates(query)?;
+
+        Ok(ranked
+            .into_iter()
+            .map(|candidate| SearchMatch::from_ranked_candidate(candidate, text_present))
+            .collect())
     }
 
     /// Returns `true` when a runtime embedding provider is attached.
@@ -2654,42 +2723,11 @@ impl RecallBackend for LanceDbBackend {
     }
 
     fn search(&self, query: &SearchQuery) -> Result<Vec<MemoryRecord>, Self::Error> {
-        let scope_filter = query
-            .scope()
-            .map(|scope| string_filter("scope_id", scope.as_str()));
-        let limit = usize::from(query.limit().value());
-
-        match query.retrieval_mode() {
-            RetrievalMode::LexicalOnly => {
-                self.lexical_candidates(scope_filter, limit, Some(query.text()))
-            }
-            RetrievalMode::SemanticOnly => {
-                self.require_semantic_capability()?;
-                Ok(self
-                    .semantic_candidates(scope_filter, Some(query.text()))?
-                    .into_iter()
-                    .take(limit)
-                    .map(|candidate| candidate.record)
-                    .collect())
-            }
-            RetrievalMode::Hybrid => {
-                if !self.supports_semantic_retrieval() {
-                    return self.lexical_candidates(scope_filter, limit, Some(query.text()));
-                }
-
-                let lexical = self.lexical_candidates(
-                    scope_filter.clone(),
-                    recall_fetch_limit(limit),
-                    Some(query.text()),
-                )?;
-                let semantic = self.semantic_candidates(scope_filter, Some(query.text()))?;
-                Ok(merge_ranked_candidates(lexical, semantic)
-                    .into_iter()
-                    .take(limit)
-                    .map(|candidate| candidate.record)
-                    .collect())
-            }
-        }
+        Ok(self
+            .search_matches(query)?
+            .into_iter()
+            .map(SearchMatch::into_record)
+            .collect())
     }
 }
 
@@ -3090,6 +3128,69 @@ impl LanceDbBackend {
                 recall_entry(candidate.record, layer, query, &explain_context, signals)
             })
             .collect())
+    }
+
+    fn ranked_search_candidates(
+        &self,
+        query: &SearchQuery,
+    ) -> Result<Vec<RankedMemoryRecord>, LanceDbError> {
+        let scope_filter = query
+            .scope()
+            .map(|scope| string_filter("scope_id", scope.as_str()));
+        let limit = usize::from(query.limit().value());
+
+        let mut ranked = match query.retrieval_mode() {
+            RetrievalMode::LexicalOnly => self
+                .lexical_candidates(scope_filter, limit, Some(query.text()))?
+                .into_iter()
+                .enumerate()
+                .map(|(index, record)| RankedMemoryRecord {
+                    record,
+                    lexical_rank: Some(index + 1),
+                    semantic_rank: None,
+                    semantic_score: None,
+                })
+                .collect::<Vec<_>>(),
+            RetrievalMode::SemanticOnly => {
+                self.require_semantic_capability()?;
+                self.semantic_candidates(scope_filter, Some(query.text()))?
+                    .into_iter()
+                    .enumerate()
+                    .map(|(index, candidate)| RankedMemoryRecord {
+                        record: candidate.record,
+                        lexical_rank: None,
+                        semantic_rank: Some(index + 1),
+                        semantic_score: Some(candidate.score),
+                    })
+                    .collect::<Vec<_>>()
+            }
+            RetrievalMode::Hybrid => {
+                if self.supports_semantic_retrieval() {
+                    let lexical = self.lexical_candidates(
+                        scope_filter.clone(),
+                        recall_fetch_limit(limit),
+                        Some(query.text()),
+                    )?;
+                    let semantic = self.semantic_candidates(scope_filter, Some(query.text()))?;
+                    merge_ranked_candidates(lexical, semantic)
+                } else {
+                    self.lexical_candidates(scope_filter, limit, Some(query.text()))?
+                        .into_iter()
+                        .enumerate()
+                        .map(|(index, record)| RankedMemoryRecord {
+                            record,
+                            lexical_rank: Some(index + 1),
+                            semantic_rank: None,
+                            semantic_score: None,
+                        })
+                        .collect::<Vec<_>>()
+                }
+            }
+        };
+
+        ranked.sort_by(search_ranked_candidate_cmp);
+        ranked.truncate(limit);
+        Ok(ranked)
     }
 
     fn update_memory_record(&mut self, record: &MemoryRecord) -> Result<(), LanceDbError> {
@@ -4833,6 +4934,57 @@ mod tests {
     }
 
     #[test]
+    fn semantic_only_search_matches_mark_semantic_results() {
+        let temp_dir = TempDir::new().expect("tempdir should be created");
+        let mut backend = LanceDbBackend::init_with_options(
+            temp_dir.path(),
+            LanceDbOpenOptions::new().embedding_provider(Arc::new(SemanticTestEmbeddingProvider)),
+        )
+        .expect("backend should initialize");
+        backend
+            .enable_vectors(
+                &VectorEnableRequest::new("semantic-test", 3)
+                    .expect("enable request should build")
+                    .with_auto_embed_on_write(true),
+            )
+            .expect("vector enablement should succeed");
+        backend
+            .remember(build_memory(
+                "memory:semantic-match",
+                "repo:mnemix",
+                "Formatting handbook",
+                "Formatting guidance for CLI output snapshots.",
+            ))
+            .expect("semantic candidate should store");
+        backend
+            .remember(build_memory(
+                "memory:semantic-other",
+                "repo:mnemix",
+                "Restore guide",
+                "Checkpoint recovery workflow for snapshots.",
+            ))
+            .expect("non-matching candidate should store");
+
+        let results = backend
+            .search_matches(
+                &SearchQuery::new_with_mode(
+                    "style guide",
+                    Some(ScopeId::try_from("repo:mnemix").expect("valid scope")),
+                    QueryLimit::new(5).expect("valid limit"),
+                    RetrievalMode::SemanticOnly,
+                )
+                .expect("search query should build"),
+            )
+            .expect("semantic search should succeed");
+
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].record().id().as_str(), "memory:semantic-match");
+        assert!(!results[0].lexical_match());
+        assert!(results[0].semantic_match());
+        assert!(results[0].semantic_score().is_some());
+    }
+
+    #[test]
     fn semantic_only_search_uses_fixed_size_embeddings_on_v4_store() {
         let temp_dir = TempDir::new().expect("tempdir should be created");
         let mut backend = LanceDbBackend::init_with_options(
@@ -5408,6 +5560,49 @@ mod tests {
         assert!(reasons.contains(&RecallReason::HybridMatch));
         assert!(!reasons.contains(&RecallReason::TextMatch));
         assert!(!reasons.contains(&RecallReason::SemanticMatch));
+    }
+
+    #[test]
+    fn search_matches_mark_hybrid_results() {
+        let temp_dir = TempDir::new().expect("tempdir should be created");
+        let mut backend = LanceDbBackend::init_with_options(
+            temp_dir.path(),
+            LanceDbOpenOptions::new().embedding_provider(Arc::new(SemanticTestEmbeddingProvider)),
+        )
+        .expect("backend should initialize");
+        backend
+            .enable_vectors(
+                &VectorEnableRequest::new("semantic-test", 3)
+                    .expect("enable request should build")
+                    .with_auto_embed_on_write(true),
+            )
+            .expect("vector enablement should succeed");
+        backend
+            .remember(build_memory(
+                "memory:hybrid-search",
+                "repo:mnemix",
+                "Formatting handbook",
+                "Formatting handbook for output rendering.",
+            ))
+            .expect("hybrid candidate should store");
+
+        let results = backend
+            .search_matches(
+                &SearchQuery::new_with_mode(
+                    "output",
+                    Some(ScopeId::try_from("repo:mnemix").expect("valid scope")),
+                    QueryLimit::new(5).expect("valid limit"),
+                    RetrievalMode::Hybrid,
+                )
+                .expect("search query should build"),
+            )
+            .expect("hybrid search should succeed");
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].record().id().as_str(), "memory:hybrid-search");
+        assert!(results[0].lexical_match());
+        assert!(results[0].semantic_match());
+        assert!(results[0].semantic_score().is_some());
     }
 
     #[test]

@@ -19,15 +19,16 @@ use ratatui::{Terminal, backend::CrosstermBackend};
 use crate::errors::CliError;
 
 use self::{
-    data::{BrowseMode, BrowserData, search_entries, validate_date_filter},
+    data::{BrowseMode, BrowserData, VectorSummary, search_entries, validate_date_filter},
     render::render,
     state::{AppState, FocusPane, InputField},
 };
 
 pub(crate) fn run(backend: &LanceDbBackend, limit: QueryLimit) -> Result<(), CliError> {
     let data = BrowserData::load(backend, limit)?;
+    let vector_summary = VectorSummary::load(backend)?;
     let mut terminal = init_terminal()?;
-    let result = run_app(&mut terminal, backend, limit, data);
+    let result = run_app(&mut terminal, backend, limit, data, vector_summary);
     restore_terminal(&mut terminal)?;
     result
 }
@@ -37,8 +38,9 @@ fn run_app(
     backend: &LanceDbBackend,
     limit: QueryLimit,
     data: BrowserData,
+    vector_summary: VectorSummary,
 ) -> Result<(), CliError> {
-    let mut state = AppState::new(data);
+    let mut state = AppState::new(data, vector_summary);
 
     loop {
         terminal.draw(|frame| render(frame, &state))?;
@@ -70,6 +72,11 @@ fn run_app(
         match state.focus() {
             FocusPane::Modes => {
                 if handle_mode_key(&mut state, key) {
+                    refresh_search_if_needed(&mut state, backend, limit)?;
+                }
+            }
+            FocusPane::Retrieval => {
+                if handle_retrieval_key(&mut state, key) {
                     refresh_search_if_needed(&mut state, backend, limit)?;
                 }
             }
@@ -116,11 +123,21 @@ fn handle_global_key(
         KeyCode::Char('r') => {
             if state.selected_mode() == BrowseMode::Search {
                 refresh_search_if_needed(state, backend, limit)?;
-                state.set_status_message("Refreshed search results");
+                if !state.search_query_is_empty()
+                    && state.selected_retrieval_mode_unavailable_reason().is_none()
+                {
+                    state.set_status_message("Refreshed search results");
+                }
                 Ok(true)
             } else {
                 Ok(false)
             }
+        }
+        KeyCode::Char('R') => {
+            state.set_vector_summary(VectorSummary::load(backend)?);
+            state.set_status_message("Reloaded vector status snapshot");
+            refresh_search_if_needed(state, backend, limit)?;
+            Ok(true)
         }
         _ => Ok(false),
     }
@@ -142,6 +159,22 @@ fn handle_scope_key(state: &mut AppState, key: KeyEvent) -> bool {
     match key.code {
         KeyCode::Down | KeyCode::Char('j') => state.next_scope(),
         KeyCode::Up | KeyCode::Char('k') => state.previous_scope(),
+        KeyCode::Right | KeyCode::Enter | KeyCode::Char('l') => {
+            state.set_focus_next();
+            false
+        }
+        KeyCode::Left | KeyCode::Char('h') => {
+            state.set_focus_previous();
+            false
+        }
+        _ => false,
+    }
+}
+
+fn handle_retrieval_key(state: &mut AppState, key: KeyEvent) -> bool {
+    match key.code {
+        KeyCode::Down | KeyCode::Char('j') => state.next_retrieval_mode(),
+        KeyCode::Up | KeyCode::Char('k') => state.previous_retrieval_mode(),
         KeyCode::Right | KeyCode::Enter | KeyCode::Char('l') => {
             state.set_focus_next();
             false
@@ -198,8 +231,11 @@ fn handle_input_key(
                     refresh_search_if_needed(state, backend, limit)?;
                     if state.search_query_is_empty() {
                         state.set_status_message("Cleared search query");
-                    } else {
+                    } else if state.selected_retrieval_mode_unavailable_reason().is_none() {
                         state.set_status_message("Updated search query");
+                    } else if let Some(reason) = state.selected_retrieval_mode_unavailable_reason()
+                    {
+                        state.set_status_message(reason);
                     }
                 }
                 Some(InputField::DateFrom | InputField::DateTo) => {
@@ -232,8 +268,20 @@ fn refresh_search_if_needed(
         return Ok(());
     }
 
+    if let Some(reason) = state.selected_retrieval_mode_unavailable_reason() {
+        state.set_search_results(Vec::new());
+        state.set_status_message(reason);
+        return Ok(());
+    }
+
     let scope = state.selected_scope().value().cloned();
-    let results = search_entries(backend, &state.search_filters().query, scope, limit)?;
+    let results = search_entries(
+        backend,
+        &state.search_filters().query,
+        scope,
+        limit,
+        state.selected_retrieval_mode(),
+    )?;
     state.set_search_results(results);
     Ok(())
 }
