@@ -133,6 +133,12 @@ fn handle_global_key(
                 Ok(false)
             }
         }
+        KeyCode::Char('R') => {
+            state.set_vector_summary(VectorSummary::load(backend)?);
+            state.set_status_message("Reloaded vector status snapshot");
+            refresh_search_if_needed(state, backend, limit)?;
+            Ok(true)
+        }
         _ => Ok(false),
     }
 }

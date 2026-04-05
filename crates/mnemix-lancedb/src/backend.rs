@@ -589,6 +589,8 @@ pub struct SearchMatch {
 
 impl SearchMatch {
     fn from_ranked_candidate(candidate: RankedMemoryRecord, text_present: bool) -> Self {
+        // Query-free search paths can still produce ranked candidates, but we only surface
+        // lexical or semantic provenance when actual query text was present.
         Self {
             lexical_match: candidate.lexical_rank.is_some() && text_present,
             semantic_match: candidate.semantic_rank.is_some() && text_present,

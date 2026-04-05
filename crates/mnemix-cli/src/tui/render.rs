@@ -12,12 +12,15 @@ use super::{
 };
 use mnemix_core::memory::MemoryKind;
 
+const MIN_HEIGHT_FOR_DETAILED_STATUS: u16 = 20;
+
 pub(crate) fn render(frame: &mut Frame, state: &AppState) {
+    let show_detailed_status = should_render_detailed_status(state, frame.area().height);
     let root = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Min(1),
-            Constraint::Length(3),
+            Constraint::Length(status_height(show_detailed_status)),
             Constraint::Length(2),
         ])
         .split(frame.area());
@@ -45,7 +48,7 @@ pub(crate) fn render(frame: &mut Frame, state: &AppState) {
     render_scopes(frame, state, sidebar[2]);
     render_results(frame, state, columns[1]);
     render_detail(frame, state, columns[2]);
-    render_status(frame, state, root[1]);
+    render_status(frame, state, root[1], show_detailed_status);
     render_footer(frame, state, root[2]);
 }
 
@@ -149,7 +152,9 @@ fn render_results(frame: &mut Frame, state: &AppState, area: Rect) {
                     entry
                         .search_match()
                         .map_or_else(String::new, |search_match| {
-                            format!(" · {}", search_match.label())
+                            search_match
+                                .label()
+                                .map_or_else(String::new, |label| format!(" · {label}"))
                         })
                 ))
                 .bold(),
@@ -197,9 +202,9 @@ fn render_detail(frame: &mut Frame, state: &AppState, area: Rect) {
     );
 }
 
-fn render_status(frame: &mut Frame, state: &AppState, area: Rect) {
-    let status = format!(
-        "Mode: {} | Search mode: {} ({}) | Scope: {} | Query: {} | Updated from: {} | Updated to: {} | Results: {}\n{}",
+fn render_status(frame: &mut Frame, state: &AppState, area: Rect, show_detailed_status: bool) {
+    let headline = format!(
+        "Mode: {} | Search mode: {} ({}) | Scope: {} | Query: {} | Updated from: {} | Updated to: {} | Results: {}",
         state.selected_mode().label(),
         state.selected_retrieval_mode_label(),
         if state.selected_retrieval_mode_supported() {
@@ -212,8 +217,18 @@ fn render_status(frame: &mut Frame, state: &AppState, area: Rect) {
         display_filter_value(&state.search_filters().date_from),
         display_filter_value(&state.search_filters().date_to),
         state.result_count(),
-        state.vector_summary().status_line(),
     );
+    let status = if show_detailed_status {
+        format!(
+            "{headline}\n{}",
+            state.vector_summary().detailed_snapshot_line()
+        )
+    } else {
+        format!(
+            "{headline} | {}",
+            state.vector_summary().compact_snapshot_line()
+        )
+    };
     frame.render_widget(
         Paragraph::new(status)
             .block(Block::default().borders(Borders::TOP).title("Status"))
@@ -231,7 +246,7 @@ fn render_footer(frame: &mut Frame, state: &AppState, area: Rect) {
         )
     } else {
         state.status_message().unwrap_or(
-            "Tab focus | j/k move | / query | f from | t to | r refresh | Enter or l focus detail | Esc or h back | q quit",
+            "Tab focus | j/k move | / query | f from | t to | r refresh | R reload vectors | Enter or l focus detail | Esc or h back | q quit",
         )
         .to_owned()
     };
@@ -299,10 +314,9 @@ fn detail_text(entry: &MemoryEntry) -> Text<'static> {
     }
 
     if let Some(search_match) = entry.search_match() {
-        lines.push(Line::from(format!(
-            "Search match: {}",
-            search_match.label()
-        )));
+        if let Some(label) = search_match.label() {
+            lines.push(Line::from(format!("Search match: {label}")));
+        }
         if let Some(score) = search_match.semantic_score() {
             lines.push(Line::from(format!("Semantic score: {score}")));
         }
@@ -389,5 +403,77 @@ fn join_iter<'a>(values: impl Iterator<Item = &'a str>) -> String {
         String::new()
     } else {
         collected.join(", ")
+    }
+}
+
+fn should_render_detailed_status(state: &AppState, area_height: u16) -> bool {
+    area_height >= MIN_HEIGHT_FOR_DETAILED_STATUS && state.vector_summary().show_detailed_snapshot()
+}
+
+const fn status_height(show_detailed_status: bool) -> u16 {
+    if show_detailed_status { 3 } else { 2 }
+}
+
+#[cfg(test)]
+mod tests {
+    use mnemix_core::{MemoryId, MemoryRecord, RecordedAt, ScopeId, memory::MemoryKind};
+
+    use super::{should_render_detailed_status, status_height};
+    use crate::tui::{
+        data::{BrowserData, MemoryEntry, ScopeOption, VectorSummary},
+        state::AppState,
+    };
+
+    fn memory(scope: &str) -> MemoryEntry {
+        let record = MemoryRecord::builder(
+            MemoryId::new(format!("memory:{scope}")).expect("id"),
+            ScopeId::new(scope).expect("scope"),
+            MemoryKind::Decision,
+        )
+        .title("Title")
+        .expect("title")
+        .summary("Summary")
+        .expect("summary")
+        .detail("Detail")
+        .expect("detail")
+        .updated_at(RecordedAt::new(std::time::UNIX_EPOCH))
+        .build()
+        .expect("record");
+        MemoryEntry::from_record(record)
+    }
+
+    fn state_with_vectors(vectors_enabled: bool) -> AppState {
+        let recent = vec![memory("repo:test")];
+        let scopes = vec![
+            ScopeOption::all(),
+            ScopeOption::new(ScopeId::new("repo:test").expect("scope")),
+        ];
+        AppState::new(
+            BrowserData::from_parts(recent.clone(), recent, scopes),
+            VectorSummary::from_parts(vectors_enabled, vectors_enabled, vectors_enabled),
+        )
+    }
+
+    #[test]
+    fn detailed_status_collapses_for_short_terminals() {
+        let state = state_with_vectors(true);
+
+        assert!(!should_render_detailed_status(&state, 18));
+        assert_eq!(status_height(false), 2);
+    }
+
+    #[test]
+    fn detailed_status_expands_for_vector_enabled_tall_terminals() {
+        let state = state_with_vectors(true);
+
+        assert!(should_render_detailed_status(&state, 24));
+        assert_eq!(status_height(true), 3);
+    }
+
+    #[test]
+    fn detailed_status_stays_collapsed_when_vectors_are_disabled() {
+        let state = state_with_vectors(false);
+
+        assert!(!should_render_detailed_status(&state, 24));
     }
 }

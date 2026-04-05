@@ -97,6 +97,10 @@ impl AppState {
         &self.vector_summary
     }
 
+    pub(crate) fn set_vector_summary(&mut self, vector_summary: VectorSummary) {
+        self.vector_summary = vector_summary;
+    }
+
     pub(crate) fn selected_retrieval_mode(&self) -> RetrievalMode {
         RETRIEVAL_MODES[self.selected_retrieval_mode]
     }
@@ -439,5 +443,16 @@ mod tests {
                 .expect("reason")
                 .contains("embedding provider")
         );
+    }
+
+    #[test]
+    fn vector_summary_can_be_reloaded_in_state() {
+        let mut state = AppState::new(data(), VectorSummary::from_parts(true, false, false));
+        state.next_retrieval_mode();
+        assert!(!state.selected_retrieval_mode_supported());
+
+        state.set_vector_summary(VectorSummary::from_parts(true, true, true));
+
+        assert!(state.selected_retrieval_mode_supported());
     }
 }

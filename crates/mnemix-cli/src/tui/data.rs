@@ -124,9 +124,35 @@ impl VectorSummary {
         Some(format!("{mode_label} search unavailable: {reason}."))
     }
 
-    pub(crate) fn status_line(&self) -> String {
+    pub(crate) fn show_detailed_snapshot(&self) -> bool {
+        self.vectors_enabled
+            || self.has_embedding_provider
+            || self.embedding_model.is_some()
+            || self.embedding_dimensions.is_some()
+            || self.vector_index_available
+            || self.total_memories > 0
+    }
+
+    pub(crate) fn compact_snapshot_line(&self) -> String {
+        let summary = if !self.vectors_enabled {
+            "disabled".to_owned()
+        } else if self.semantic_retrieval_available {
+            format!(
+                "ready (model={}, coverage={}%)",
+                self.embedding_model.as_deref().unwrap_or("configured"),
+                self.embedding_coverage_percent
+            )
+        } else if !self.has_embedding_provider {
+            "provider missing".to_owned()
+        } else {
+            "semantic unavailable".to_owned()
+        };
+        format!("Vector snapshot: {summary}")
+    }
+
+    pub(crate) fn detailed_snapshot_line(&self) -> String {
         format!(
-            "Vectors: enabled={} model={} dims={} provider={} semantic={} auto-embed={} coverage={}% ({}/{}) index={}{}",
+            "Vector snapshot: enabled={} model={} dims={} provider={} semantic={} auto-embed={} coverage={}% ({}/{}) index={}{}",
             self.vectors_enabled,
             self.embedding_model.as_deref().unwrap_or("none"),
             self.embedding_dimensions
@@ -240,12 +266,12 @@ impl SearchMatchDetails {
         }
     }
 
-    pub(crate) const fn label(&self) -> &'static str {
+    pub(crate) const fn label(&self) -> Option<&'static str> {
         match (self.lexical_match, self.semantic_match) {
-            (true, true) => "hybrid",
-            (true, false) => "lexical",
-            (false, true) => "semantic",
-            (false, false) => "unknown",
+            (true, true) => Some("hybrid"),
+            (true, false) => Some("lexical"),
+            (false, true) => Some("semantic"),
+            (false, false) => None,
         }
     }
 
@@ -312,6 +338,9 @@ impl BrowserData {
     }
 }
 
+/// The TUI uses LanceDB directly here so it can render search provenance from
+/// `search_matches`; if another backend needs TUI support, this is the seam to
+/// generalize.
 pub(crate) fn search_entries(
     backend: &LanceDbBackend,
     query_text: &str,
@@ -464,5 +493,24 @@ mod tests {
                 "Hybrid search unavailable: this CLI session does not have an embedding provider attached.".to_owned()
             )
         );
+    }
+
+    #[test]
+    fn vector_summary_uses_compact_snapshot_when_vectors_disabled() {
+        let summary = VectorSummary::from_parts(false, false, false);
+
+        assert!(!summary.show_detailed_snapshot());
+        assert_eq!(summary.compact_snapshot_line(), "Vector snapshot: disabled");
+    }
+
+    #[test]
+    fn search_match_details_hide_absent_provenance() {
+        let details = super::SearchMatchDetails {
+            lexical_match: false,
+            semantic_match: false,
+            semantic_score: None,
+        };
+
+        assert_eq!(details.label(), None);
     }
 }
