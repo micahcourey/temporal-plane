@@ -1,5 +1,5 @@
 ---
-status: in_progress
+status: open
 summary: A slim read-only `mnemix ui` slice is implemented with recent, pinned, and search browsing, explicit `from` / `to` date fields, keyboard-first detail inspection, and a shared core browse contract.
 updated: 2026-03-31
 ---

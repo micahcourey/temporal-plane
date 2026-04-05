@@ -4,8 +4,10 @@
 
 mod cli;
 mod cmd;
+mod config;
 mod errors;
 mod output;
+mod providers_runtime;
 mod tui;
 
 use std::process::ExitCode;

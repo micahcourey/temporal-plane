@@ -2,8 +2,8 @@ use std::path::PathBuf;
 
 use clap::{ArgGroup, Parser, Subcommand, ValueEnum};
 use mnemix_core::{
-    CheckpointName, DisclosureDepth, EntityName, MemoryId, PolicyAction, PolicyTrigger, ScopeId,
-    SessionId, SourceRef, TagName, ToolName,
+    CheckpointName, DisclosureDepth, EntityName, MemoryId, PolicyAction, PolicyTrigger,
+    RetrievalMode, ScopeId, SessionId, SourceRef, TagName, ToolName,
 };
 
 use crate::output::OutputFormat;
@@ -51,6 +51,7 @@ pub(crate) enum Command {
     Versions(VersionsArgs),
     Restore(RestoreArgs),
     Optimize(OptimizeArgs),
+    Providers(ProvidersArgs),
     Vectors(VectorsArgs),
     Stats(StatsArgs),
     Export(ExportArgs),
@@ -121,6 +122,12 @@ pub(crate) struct RecallArgs {
     #[arg(long, value_enum, default_value_t = DisclosureDepthArg::SummaryThenPinned)]
     pub(crate) disclosure_depth: DisclosureDepthArg,
 
+    #[arg(long, value_enum, default_value_t = RetrievalModeArg::Lexical)]
+    pub(crate) mode: RetrievalModeArg,
+
+    #[arg(long, value_parser = parse_provider_profile_name)]
+    pub(crate) provider: Option<String>,
+
     #[arg(long, value_parser = clap::value_parser!(u16).range(1..=1000), default_value_t = DEFAULT_SEARCH_LIMIT)]
     pub(crate) limit: u16,
 }
@@ -180,6 +187,12 @@ pub(crate) struct SearchArgs {
 
     #[arg(long, value_parser = parse_scope_id)]
     pub(crate) scope: Option<ScopeId>,
+
+    #[arg(long, value_enum, default_value_t = RetrievalModeArg::Lexical)]
+    pub(crate) mode: RetrievalModeArg,
+
+    #[arg(long, value_parser = parse_provider_profile_name)]
+    pub(crate) provider: Option<String>,
 
     #[arg(long, value_parser = clap::value_parser!(u16).range(1..=1000), default_value_t = DEFAULT_SEARCH_LIMIT)]
     pub(crate) limit: u16,
@@ -249,6 +262,64 @@ pub(crate) struct OptimizeArgs {
 }
 
 #[derive(clap::Args, Debug)]
+pub(crate) struct ProvidersArgs {
+    #[command(subcommand)]
+    pub(crate) command: ProvidersCommand,
+}
+
+#[derive(Subcommand, Debug)]
+pub(crate) enum ProvidersCommand {
+    List,
+    Show(ProviderShowArgs),
+    Validate(ProviderShowArgs),
+    SetCloud(ProviderSetCloudArgs),
+    SetLocal(ProviderSetLocalArgs),
+    Remove(ProviderRemoveArgs),
+}
+
+#[derive(clap::Args, Debug)]
+pub(crate) struct ProviderShowArgs {
+    #[arg(long, value_parser = parse_provider_profile_name)]
+    pub(crate) name: String,
+}
+
+#[derive(clap::Args, Debug)]
+pub(crate) struct ProviderSetCloudArgs {
+    #[arg(long, value_parser = parse_provider_profile_name)]
+    pub(crate) name: String,
+
+    #[arg(long, value_parser = parse_non_empty)]
+    pub(crate) model: String,
+
+    #[arg(long, value_parser = parse_non_empty)]
+    pub(crate) base_url: String,
+
+    #[arg(long, value_parser = parse_env_var_name)]
+    pub(crate) api_key_env: String,
+}
+
+#[derive(clap::Args, Debug)]
+pub(crate) struct ProviderSetLocalArgs {
+    #[arg(long, value_parser = parse_provider_profile_name)]
+    pub(crate) name: String,
+
+    #[arg(long, value_parser = parse_non_empty)]
+    pub(crate) model: String,
+
+    #[arg(long, value_parser = parse_non_empty)]
+    pub(crate) endpoint: String,
+
+    #[arg(long, value_parser = parse_env_var_name)]
+    pub(crate) auth_token_env: Option<String>,
+}
+
+#[derive(clap::Args, Debug)]
+pub(crate) struct ProviderRemoveArgs {
+    #[arg(long, value_parser = parse_provider_profile_name)]
+    pub(crate) name: String,
+}
+
+#[derive(clap::Args, Debug)]
 pub(crate) struct VectorsArgs {
     #[command(subcommand)]
     pub(crate) command: VectorsCommand,
@@ -256,18 +327,48 @@ pub(crate) struct VectorsArgs {
 
 #[derive(Subcommand, Debug)]
 pub(crate) enum VectorsCommand {
-    Show,
+    Show(VectorRuntimeArgs),
     Enable(VectorEnableArgs),
     Backfill(VectorBackfillArgs),
 }
 
-#[derive(clap::Args, Debug)]
-pub(crate) struct VectorEnableArgs {
-    #[arg(long)]
-    pub(crate) model: String,
+#[derive(clap::Args, Debug, Default)]
+pub(crate) struct VectorRuntimeArgs {
+    #[arg(long, value_parser = parse_provider_profile_name)]
+    pub(crate) provider: Option<String>,
+}
 
-    #[arg(long, value_parser = clap::value_parser!(u32).range(1..))]
-    pub(crate) dimensions: u32,
+#[derive(clap::Args, Debug)]
+#[command(group(
+    ArgGroup::new("vector_enable_source")
+        .required(true)
+        .multiple(false)
+        .args(["provider", "model"])
+))]
+pub(crate) struct VectorEnableArgs {
+    #[arg(
+        long,
+        value_parser = parse_provider_profile_name,
+        group = "vector_enable_source",
+        conflicts_with_all = ["model", "dimensions"]
+    )]
+    pub(crate) provider: Option<String>,
+
+    #[arg(
+        long,
+        requires = "dimensions",
+        group = "vector_enable_source",
+        conflicts_with = "provider"
+    )]
+    pub(crate) model: Option<String>,
+
+    #[arg(
+        long,
+        value_parser = clap::value_parser!(u32).range(1..),
+        requires = "model",
+        conflicts_with = "provider"
+    )]
+    pub(crate) dimensions: Option<u32>,
 
     #[arg(long)]
     pub(crate) auto_embed_on_write: bool,
@@ -277,6 +378,9 @@ pub(crate) struct VectorEnableArgs {
 pub(crate) struct VectorBackfillArgs {
     #[arg(long)]
     pub(crate) apply: bool,
+
+    #[arg(long, value_parser = parse_provider_profile_name)]
+    pub(crate) provider: Option<String>,
 }
 
 #[derive(clap::Args, Debug)]
@@ -321,6 +425,13 @@ pub(crate) enum DisclosureDepthArg {
     Full,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+pub(crate) enum RetrievalModeArg {
+    Lexical,
+    Semantic,
+    Hybrid,
+}
+
 impl From<MemoryKindArg> for mnemix_core::MemoryKind {
     fn from(value: MemoryKindArg) -> Self {
         match value {
@@ -341,6 +452,22 @@ impl From<DisclosureDepthArg> for DisclosureDepth {
             DisclosureDepthArg::SummaryOnly => Self::SummaryOnly,
             DisclosureDepthArg::SummaryThenPinned => Self::SummaryThenPinned,
             DisclosureDepthArg::Full => Self::Full,
+        }
+    }
+}
+
+impl RetrievalModeArg {
+    pub(crate) const fn requires_provider(self) -> bool {
+        !matches!(self, Self::Lexical)
+    }
+}
+
+impl From<RetrievalModeArg> for RetrievalMode {
+    fn from(value: RetrievalModeArg) -> Self {
+        match value {
+            RetrievalModeArg::Lexical => Self::LexicalOnly,
+            RetrievalModeArg::Semantic => Self::SemanticOnly,
+            RetrievalModeArg::Hybrid => Self::Hybrid,
         }
     }
 }
@@ -375,6 +502,51 @@ fn parse_tool_name(value: &str) -> Result<ToolName, String> {
 
 fn parse_source_ref(value: &str) -> Result<SourceRef, String> {
     SourceRef::try_from(value).map_err(|error| error.to_string())
+}
+
+fn parse_provider_profile_name(value: &str) -> Result<String, String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err("provider profile name cannot be empty".to_owned());
+    }
+    if !trimmed
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.'))
+    {
+        return Err(
+            "provider profile name may only contain ASCII letters, digits, `.`, `_`, and `-`"
+                .to_owned(),
+        );
+    }
+    Ok(trimmed.to_owned())
+}
+
+fn parse_env_var_name(value: &str) -> Result<String, String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err("environment variable name cannot be empty".to_owned());
+    }
+    let mut chars = trimmed.chars();
+    let Some(first) = chars.next() else {
+        return Err("environment variable name cannot be empty".to_owned());
+    };
+    if !(first.is_ascii_alphabetic() || first == '_') {
+        return Err("environment variable name must start with a letter or `_`".to_owned());
+    }
+    if !chars.all(|ch| ch.is_ascii_alphanumeric() || ch == '_') {
+        return Err(
+            "environment variable name may only contain ASCII letters, digits, and `_`".to_owned(),
+        );
+    }
+    Ok(trimmed.to_owned())
+}
+
+fn parse_non_empty(value: &str) -> Result<String, String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err("value cannot be empty".to_owned());
+    }
+    Ok(trimmed.to_owned())
 }
 
 fn parse_metadata_entry(value: &str) -> Result<MetadataEntry, String> {

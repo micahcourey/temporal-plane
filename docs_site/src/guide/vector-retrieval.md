@@ -8,24 +8,64 @@ The current vector layer includes:
 
 - persisted store-level vector settings
 - persisted embeddings alongside memory records
+- machine-local provider profiles for cloud and local embedding runtimes
 - coverage and readiness reporting through the CLI
-- backend support for semantic-only and hybrid retrieval when an embedding provider is attached
+- top-level semantic-only and hybrid CLI retrieval when a compatible embedding provider is attached
 - export and staged import flows that preserve vector state instead of dropping it
 
 This means a store can carry its vector configuration and embeddings across clone, export, and import workflows even if the current client is only using lexical retrieval.
 
 ## Current CLI workflow
 
+### Configure a provider profile
+
+Cloud profile:
+
+```bash
+mnemix providers set-cloud \
+  --name openai \
+  --model text-embedding-3-small \
+  --base-url https://api.openai.com/v1 \
+  --api-key-env OPENAI_API_KEY
+```
+
+Local profile:
+
+```bash
+mnemix providers set-local \
+  --name ollama \
+  --model nomic-embed-text \
+  --endpoint http://127.0.0.1:11434/v1
+```
+
+Provider profiles are machine-local. They keep endpoints, model ids, and secret-source references outside the store itself.
+
+### Validate a provider and compare it to a store
+
+```bash
+mnemix --store .mnemix providers validate --name openai
+```
+
+`providers validate` now reports:
+
+- the resolved model id
+- the resolved embedding dimensions
+- whether the current store is uninitialized, vectors-disabled, matched, or mismatched
+
+That makes it easier to answer "is this provider usable here?" before backfill or retrieval starts.
+
 ### Inspect vector status
 
 ```bash
-mnemix --store .mnemix vectors show
+mnemix --store .mnemix vectors show --provider openai
 ```
 
 `vectors show` reports:
 
 - whether vectors are enabled for the store
 - whether the current runtime has an embedding provider attached
+- the resolved provider model and dimensions when `--provider` is used
+- whether the provider matches the current store settings
 - whether auto-embed-on-write can run right now
 - how many memories already have persisted embeddings
 - whether the store shape is ready for future LanceDB-native vector indexing
@@ -36,20 +76,26 @@ This is the fastest way to answer "is this store vector-ready yet?" without insp
 
 ```bash
 mnemix --store .mnemix vectors enable \
-  --model my-embedding-model \
-  --dimensions 1536
+  --provider openai
 ```
 
-This persists the embedding model identifier and embedding dimensionality as store metadata. You can also record the intent to embed new writes automatically:
+This persists the provider's resolved embedding model identifier and embedding dimensionality as store metadata. You can still set the values manually if you need to:
 
 ```bash
 mnemix --store .mnemix vectors enable \
   --model my-embedding-model \
-  --dimensions 1536 \
+  --dimensions 1536
+```
+
+You can also record the intent to embed new writes automatically:
+
+```bash
+mnemix --store .mnemix vectors enable \
+  --provider openai \
   --auto-embed-on-write
 ```
 
-That flag only becomes operational when the backend is opened with an embedding provider. The shipped CLI does not currently attach one on its own, so this setting is best understood as persisted store configuration rather than immediate CLI behavior.
+That flag becomes operational when the current command opens the store with a compatible provider profile.
 
 ### Plan a backfill
 
@@ -57,25 +103,50 @@ That flag only becomes operational when the backend is opened with an embedding 
 mnemix --store .mnemix vectors backfill
 ```
 
-This command is currently a dry-run planner. It reports how many memories are candidates for embedding backfill and only counts memories that are still missing persisted embeddings.
+This command remains a dry-run planner when `--apply` is omitted. It reports how many memories are candidates for embedding backfill and only counts memories that are still missing persisted embeddings.
 
-The shipped CLI does not yet support applying that plan directly:
+To execute the backfill:
 
 ```bash
-mnemix --store .mnemix vectors backfill --apply
+mnemix --store .mnemix vectors backfill --apply --provider openai
 ```
 
-That path returns an explicit unsupported error because the CLI binary does not currently expose an embedding provider.
+That path now fails explicitly if the provider is missing or if the provider does not match the store's configured vector settings.
 
 ## Retrieval behavior today
 
-There are two different layers to keep straight:
+Lexical retrieval is still the default baseline, but the CLI now exposes all three retrieval modes when you select a provider explicitly:
+
+```bash
+mnemix --store .mnemix search \
+  --text "storage decision" \
+  --scope repo:mnemix \
+  --mode semantic \
+  --provider openai
+```
+
+```bash
+mnemix --store .mnemix recall \
+  --text "architecture" \
+  --scope repo:mnemix \
+  --mode hybrid \
+  --provider openai
+```
+
+The CLI output now tells you:
+
+- which retrieval mode ran
+- which provider profile was used
+- whether a search hit was lexical, semantic, or hybrid
+- the semantic score when one was available
+
+There are still two layers to keep straight:
 
 - The LanceDB backend now supports lexical, semantic-only, and hybrid retrieval modes.
-- The shipped `mnemix` CLI still exposes lexical top-level `search` and `recall` commands.
-- `mnemix ui` now surfaces vector status plus lexical, semantic, and hybrid mode selection, but semantic and hybrid modes remain unavailable unless the runtime opens the store with an embedding provider.
+- The shipped `mnemix` CLI now exposes semantic and hybrid top-level `search` and `recall`, but only when a compatible provider profile is selected.
+- `mnemix ui` surfaces vector status plus lexical, semantic, and hybrid mode selection, but semantic and hybrid modes still depend on a runtime that opens the store with an embedding provider.
 
-That means vector enablement is already useful for store portability, coverage tracking, backend/API consumers, and TUI inspection, but end-to-end semantic execution in the shipped CLI still depends on future runtime provider wiring.
+That means vector enablement is useful both for store portability and for immediate end-to-end semantic execution from the shipped CLI.
 
 ## Portability and import flows
 

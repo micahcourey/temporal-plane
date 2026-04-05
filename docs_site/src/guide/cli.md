@@ -25,6 +25,7 @@ Available commands:
 - `versions`
 - `restore`
 - `optimize`
+- `providers`
 - `vectors`
 - `stats`
 - `export`
@@ -79,7 +80,15 @@ mnemix --store .mnemix search \
   --limit 10
 ```
 
-The current CLI search surface is lexical. Store-level vector readiness is configured separately through the `vectors` command group.
+To run semantic or hybrid retrieval, attach an explicit provider profile:
+
+```bash
+mnemix --store .mnemix search \
+  --text "storage decision" \
+  --scope repo:mnemix \
+  --mode semantic \
+  --provider openai
+```
 
 ### Inspect a single memory
 
@@ -137,7 +146,41 @@ mnemix --store .mnemix vectors show
 
 This reports whether vectors are enabled, whether the current runtime can embed new writes, embedding coverage, and whether the store is ready for a future LanceDB-native vector index.
 
+### Configure provider profiles
+
+Cloud provider:
+
+```bash
+mnemix providers set-cloud \
+  --name openai \
+  --model text-embedding-3-small \
+  --base-url https://api.openai.com/v1 \
+  --api-key-env OPENAI_API_KEY
+```
+
+Local provider:
+
+```bash
+mnemix providers set-local \
+  --name ollama \
+  --model nomic-embed-text \
+  --endpoint http://127.0.0.1:11434/v1
+```
+
+Validate a provider and compare it against the current store:
+
+```bash
+mnemix --store .mnemix providers validate --name openai
+```
+
 ### Enable vector settings
+
+```bash
+mnemix --store .mnemix vectors enable \
+  --provider openai
+```
+
+You can still set model and dimensions manually:
 
 ```bash
 mnemix --store .mnemix vectors enable \
@@ -149,8 +192,7 @@ To persist the intent to embed new writes automatically when a provider is avail
 
 ```bash
 mnemix --store .mnemix vectors enable \
-  --model my-embedding-model \
-  --dimensions 1536 \
+  --provider openai \
   --auto-embed-on-write
 ```
 
@@ -160,7 +202,11 @@ mnemix --store .mnemix vectors enable \
 mnemix --store .mnemix vectors backfill
 ```
 
-This is currently a dry-run planner. The shipped CLI does not wire in an embedding provider, so `mnemix vectors backfill --apply` returns an explicit unsupported error instead of attempting a partial backfill.
+This remains the dry-run planner. To apply the backfill:
+
+```bash
+mnemix --store .mnemix vectors backfill --apply --provider openai
+```
 
 ### Optimize the store
 
@@ -228,8 +274,10 @@ Successful commands return structured data under a `kind` and `data` envelope. F
 - `checkpoint` creates a stable, human-readable reference to the current version.
 - `restore` always requires exactly one target: `--checkpoint` or `--version`.
 - `optimize` is conservative by default and only prunes old versions when `--prune` is set.
-- Top-level `search` and `recall` remain lexical in the shipped CLI even when a store is vector-enabled.
+- Top-level `search` and `recall` support lexical, semantic, and hybrid retrieval. Semantic and hybrid modes require `--provider <NAME>`.
 - `mnemix ui` surfaces vector readiness and retrieval-mode availability, but semantic and hybrid execution still require a runtime that opens the store with an embedding provider.
 - `vectors show` is the main inspection command for vector readiness, coverage, and provider availability.
-- `vectors backfill` plans missing embeddings only; `--apply` is intentionally unsupported in the current CLI binary.
+- `providers validate` reports resolved provider dimensions plus whether the current store matches that provider.
+- `vectors enable` can derive store model and dimensions directly from `--provider <NAME>`.
+- `vectors backfill --apply` requires `--provider <NAME>` and fails explicitly on provider/store mismatches.
 - `remember` supports tags, entities, metadata, and source attribution fields for richer recall and inspection.

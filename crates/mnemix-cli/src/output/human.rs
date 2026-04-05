@@ -3,14 +3,18 @@ use std::collections::BTreeMap;
 use crate::output::{
     CheckpointResultView, CommandOutput, MemoryDetailView, MemoryListView, MemoryResultView,
     MemorySummaryView, OptimizeResultView, PolicyDecisionView, PolicyRuleEvaluationView,
-    RecallEntryView, RecallResultView, RestoreResultView, StatsResultView, StatusView,
-    VersionListView,
+    ProviderProfileListView, ProviderProfileResultView, ProviderProfileView, RecallEntryView,
+    RecallResultView, RestoreResultView, StatsResultView, StatusView, VersionListView,
 };
 
 pub(crate) fn render_human(output: &CommandOutput) -> String {
     let mut rendered = String::new();
     match output {
         CommandOutput::Status(view) => render_status(&mut rendered, view),
+        CommandOutput::ProviderProfile(view) => render_provider_profile_result(&mut rendered, view),
+        CommandOutput::ProviderProfileList(view) => {
+            render_provider_profile_list(&mut rendered, view);
+        }
         CommandOutput::Memory(view) => render_memory(&mut rendered, view),
         CommandOutput::MemoryList(view) => render_memory_list(&mut rendered, view),
         CommandOutput::Recall(view) => render_recall(&mut rendered, view),
@@ -94,6 +98,28 @@ fn render_status(buffer: &mut String, view: &StatusView) {
     }
 }
 
+fn render_provider_profile_result(buffer: &mut String, view: &ProviderProfileResultView) {
+    push_line(buffer, &format!("{}: {}", view.command, view.action));
+    push_line(buffer, &format!("config_path: {}", view.config_path));
+    render_provider_profile(buffer, &view.profile);
+}
+
+fn render_provider_profile_list(buffer: &mut String, view: &ProviderProfileListView) {
+    push_line(
+        buffer,
+        &format!("{}: {} profile(s)", view.command, view.count),
+    );
+    push_line(buffer, &format!("config_path: {}", view.config_path));
+    if view.profiles.is_empty() {
+        push_line(buffer, "(no provider profiles)");
+        return;
+    }
+    for profile in &view.profiles {
+        push_line(buffer, "---");
+        render_provider_profile(buffer, profile);
+    }
+}
+
 fn render_memory(buffer: &mut String, view: &MemoryResultView) {
     push_line(buffer, &format!("{}: {}", view.command, view.action));
     render_memory_detail(buffer, &view.memory);
@@ -109,6 +135,12 @@ fn render_memory_list(buffer: &mut String, view: &MemoryListView) {
     }
     if let Some(query_text) = &view.query_text {
         push_line(buffer, &format!("query: {query_text}"));
+    }
+    if let Some(retrieval_mode) = view.retrieval_mode {
+        push_line(buffer, &format!("retrieval_mode: {retrieval_mode}"));
+    }
+    if let Some(provider) = &view.provider {
+        push_line(buffer, &format!("provider: {provider}"));
     }
     if view.memories.is_empty() {
         push_line(buffer, "(no memories)");
@@ -148,6 +180,10 @@ fn render_recall(buffer: &mut String, view: &RecallResultView) {
         buffer,
         &format!("disclosure_depth: {}", view.disclosure_depth),
     );
+    push_line(buffer, &format!("retrieval_mode: {}", view.retrieval_mode));
+    if let Some(provider) = &view.provider {
+        push_line(buffer, &format!("provider: {provider}"));
+    }
     render_recall_section(buffer, "pinned_context", &view.pinned_context);
     render_recall_section(buffer, "summaries", &view.summaries);
     render_recall_section(buffer, "archival", &view.archival);
@@ -291,6 +327,17 @@ fn render_memory_summary(buffer: &mut String, memory: &MemorySummaryView) {
         pin_reason: memory.pin_reason.as_deref(),
     };
     render_memory_common(buffer, &common);
+    if let Some(search_match) = &memory.search_match {
+        push_line(buffer, &format!("search_match: {}", search_match.kind));
+        push_line(buffer, &format!("lexical_match: {}", search_match.lexical));
+        push_line(
+            buffer,
+            &format!("semantic_match: {}", search_match.semantic),
+        );
+        if let Some(score) = &search_match.semantic_score {
+            push_line(buffer, &format!("semantic_score: {score}"));
+        }
+    }
     render_list(buffer, "tags", &memory.tags);
     render_list(buffer, "entities", &memory.entities);
 }
@@ -375,6 +422,19 @@ fn render_list(buffer: &mut String, label: &str, values: &[String]) {
     push_line(buffer, &format!("{label}: {}", values.join(", ")));
 }
 
+fn render_provider_profile(buffer: &mut String, profile: &ProviderProfileView) {
+    push_line(buffer, &format!("name: {}", profile.name));
+    push_line(buffer, &format!("kind: {}", profile.kind));
+    push_line(buffer, &format!("model: {}", profile.model));
+    push_line(buffer, &format!("endpoint: {}", profile.endpoint));
+    if let Some(api_key_source) = &profile.api_key_source {
+        push_line(buffer, &format!("api_key_source: {api_key_source}"));
+    }
+    if let Some(auth_token_source) = &profile.auth_token_source {
+        push_line(buffer, &format!("auth_token_source: {auth_token_source}"));
+    }
+}
+
 fn render_metadata(buffer: &mut String, metadata: &BTreeMap<String, String>) {
     if metadata.is_empty() {
         return;
@@ -395,7 +455,10 @@ mod tests {
     use insta::assert_snapshot;
 
     use super::*;
-    use crate::output::{CheckpointView, OptimizeRetentionView, StatsView, VersionView};
+    use crate::output::{
+        CheckpointView, OptimizeRetentionView, ProviderProfileListView, ProviderProfileResultView,
+        ProviderProfileView, StatsView, VersionView,
+    };
 
     fn demo_memory_detail() -> MemoryDetailView {
         MemoryDetailView {
@@ -433,6 +496,7 @@ mod tests {
             confidence: 95,
             created_at: "1970-01-01T00:16:40Z".to_owned(),
             updated_at: "1970-01-01T00:33:20Z".to_owned(),
+            search_match: None,
             tags: vec!["milestone-3".to_owned(), "cli".to_owned()],
             entities: vec!["Mnemix".to_owned()],
         }
@@ -443,6 +507,17 @@ mod tests {
             layer,
             reasons: vec!["scope_filter", "text_match", "importance_boost"],
             memory: demo_memory_summary(),
+        }
+    }
+
+    fn demo_provider_profile() -> ProviderProfileView {
+        ProviderProfileView {
+            name: "openai".to_owned(),
+            kind: "cloud",
+            model: "text-embedding-3-small".to_owned(),
+            endpoint: "https://api.openai.com/v1".to_owned(),
+            api_key_source: Some("env:OPENAI_API_KEY".to_owned()),
+            auth_token_source: None,
         }
     }
 
@@ -497,11 +572,54 @@ metadata:
     }
 
     #[test]
+    fn provider_profile_list_snapshot() {
+        let output = CommandOutput::ProviderProfileList(Box::new(ProviderProfileListView {
+            command: "providers list",
+            count: 1,
+            config_path: "/tmp/config/mnemix/providers.toml".to_owned(),
+            profiles: vec![demo_provider_profile()],
+        }));
+
+        assert_snapshot!(render_human(&output), @r"
+providers list: 1 profile(s)
+config_path: /tmp/config/mnemix/providers.toml
+---
+name: openai
+kind: cloud
+model: text-embedding-3-small
+endpoint: https://api.openai.com/v1
+api_key_source: env:OPENAI_API_KEY
+");
+    }
+
+    #[test]
+    fn provider_profile_result_snapshot() {
+        let output = CommandOutput::ProviderProfile(Box::new(ProviderProfileResultView {
+            command: "providers show",
+            action: "show",
+            config_path: "/tmp/config/mnemix/providers.toml".to_owned(),
+            profile: demo_provider_profile(),
+        }));
+
+        assert_snapshot!(render_human(&output), @r"
+providers show: show
+config_path: /tmp/config/mnemix/providers.toml
+name: openai
+kind: cloud
+model: text-embedding-3-small
+endpoint: https://api.openai.com/v1
+api_key_source: env:OPENAI_API_KEY
+");
+    }
+
+    #[test]
     fn memory_list_output_snapshot() {
         let output = CommandOutput::MemoryList(Box::new(MemoryListView {
             command: "search",
             scope: Some("repo:mnemix".to_owned()),
             query_text: Some("CLI".to_owned()),
+            retrieval_mode: Some("lexical"),
+            provider: None,
             count: 1,
             memories: vec![demo_memory_summary()],
         }));
@@ -510,6 +628,7 @@ metadata:
 search: 1 result(s)
 scope: repo:mnemix
 query: CLI
+retrieval_mode: lexical
 ---
 id: memory:1
 scope_id: repo:mnemix
@@ -534,6 +653,8 @@ entities: Mnemix
             scope: Some("repo:mnemix".to_owned()),
             query_text: Some("CLI".to_owned()),
             disclosure_depth: "summary_then_pinned",
+            retrieval_mode: "lexical",
+            provider: None,
             count: 2,
             pinned_context: vec![demo_recall_entry("pinned_context")],
             summaries: vec![demo_recall_entry("summary")],
@@ -545,6 +666,7 @@ recall: 2 result(s)
 scope: repo:mnemix
 query: CLI
 disclosure_depth: summary_then_pinned
+retrieval_mode: lexical
 pinned_context: 1
 ---
 layer: pinned_context
