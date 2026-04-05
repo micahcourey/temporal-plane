@@ -94,10 +94,11 @@ fn render_retrieval_modes(frame: &mut Frame, state: &AppState, area: Rect) {
         .iter()
         .map(|mode| {
             let label = retrieval_mode_label(*mode);
-            let suffix = state
-                .vector_summary()
-                .unavailable_reason(*mode)
-                .map_or("", |_| " (unavailable)");
+            let suffix = if state.vector_summary().supports_mode(*mode) {
+                ""
+            } else {
+                " (unavailable)"
+            };
             ListItem::new(format!("{label}{suffix}"))
         })
         .collect::<Vec<_>>();

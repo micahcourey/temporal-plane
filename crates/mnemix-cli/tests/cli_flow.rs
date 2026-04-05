@@ -14,6 +14,9 @@ use assert_cmd::Command;
 use serde_json::Value;
 use tempfile::tempdir;
 
+const MOCK_SERVER_IDLE_POLL_INTERVAL: Duration = Duration::from_millis(25);
+const MOCK_SERVER_MAX_IDLE_POLLS: u16 = 600;
+
 fn cli() -> Command {
     Command::cargo_bin("mnemix").expect("binary should build")
 }
@@ -159,7 +162,7 @@ fn start_mock_embeddings_server() -> (String, thread::JoinHandle<()>) {
         .expect("mock server should support nonblocking accept");
     let address = listener.local_addr().expect("local addr");
     let handle = thread::spawn(move || {
-        let mut idle_rounds = 0_u8;
+        let mut idle_rounds = 0_u16;
         loop {
             let mut stream = match listener.accept() {
                 Ok((stream, _)) => {
@@ -168,10 +171,10 @@ fn start_mock_embeddings_server() -> (String, thread::JoinHandle<()>) {
                 }
                 Err(error) if error.kind() == ErrorKind::WouldBlock => {
                     idle_rounds += 1;
-                    if idle_rounds >= 200 {
+                    if idle_rounds >= MOCK_SERVER_MAX_IDLE_POLLS {
                         break;
                     }
-                    thread::sleep(Duration::from_millis(25));
+                    thread::sleep(MOCK_SERVER_IDLE_POLL_INTERVAL);
                     continue;
                 }
                 Err(error) => panic!("incoming stream should be accepted: {error}"),
