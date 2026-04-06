@@ -187,6 +187,31 @@ pub enum EvidenceTtl {
     Manual,
 }
 
+impl EvidenceTtl {
+    /// Returns the stable string representation used by config and CLI surfaces.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Task => "task",
+            Self::Session => "session",
+            Self::Manual => "manual",
+        }
+    }
+}
+
+impl FromStr for EvidenceTtl {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value.trim() {
+            "task" => Ok(Self::Task),
+            "session" => Ok(Self::Session),
+            "manual" => Ok(Self::Manual),
+            other => Err(format!("unsupported evidence ttl `{other}`")),
+        }
+    }
+}
+
 /// Store-level defaults for policy evaluation.
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 pub struct PolicyDefaults {

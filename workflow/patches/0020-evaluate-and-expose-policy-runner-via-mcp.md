@@ -1,7 +1,7 @@
 ---
-status: open
-summary: "Evaluate whether MCP adds value as an interoperability layer for the policy runner, then implement the initial MCP surf\u2026"
-updated: "2026-03-21"
+status: completed
+summary: "Deferred MCP exposure for the policy runner until host-side workflows demonstrate a concrete interoperability need."
+updated: "2026-04-05"
 ---
 
 # Patch: Evaluate and expose policy runner via MCP
@@ -16,22 +16,25 @@ This patch preserves legacy Dex history after the repository moved to repo-nativ
 
 ## Scope
 
-- Preserve the original Dex task details for `3108zh39`.
-- Keep the tracked status aligned with the final Dex state: `open`.
-- Avoid reinterpreting the historical task beyond the recorded Dex description and outcome.
+- Evaluate whether MCP adds enough value beyond the host-side policy surfaces
+- Document the decision in repo-native workflow and user-facing guides
+- Preserve the design rule that enforcement remains host-side
 
 ## Implementation Notes
 
-- Imported from legacy Dex tracking during the 2026-03-30 workflow migration.
-- Original Dex task ID: `3108zh39`
-- Created: 2026-03-21
-- Started: Not recorded
-- Completed: Not recorded
+- Reviewed the current policy surface after lifecycle commands, enforcement
+  examples, and `CodingAgentAdapter` composition landed
+- Deferred MCP because wrapper scripts, hooks, CI, and adapter composition now
+  cover the primary host-side enforcement paths without adding another contract
+  to maintain
+- Updated `workflow/workstreams/001-.../STATUS.md`, `tasks.md`, `plan.md`, and
+  `docs_site/src/guide/policy-runner.md` to reflect the defer decision
 
 ## Validation
 
-- This task was still open in Dex when the history was imported.
-- Migration check: imported into `workflow/patches/` for repo-native tracking.
+- The policy-runner guide now documents MCP as intentionally deferred
+- The workstream tracking artifacts mark issue `#81` as resolved by an explicit
+  defer decision
 
 ## References
 

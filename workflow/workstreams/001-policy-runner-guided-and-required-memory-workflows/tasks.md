@@ -18,31 +18,31 @@ follow-on issues are tracked as active execution slices.
 
 ### State Lifecycle
 
-- [ ] Implement issue `#83`: clear and cleanup flows for policy evidence,
+- [x] Implement issue `#83`: clear and cleanup flows for policy evidence,
   lifecycle handling, and TTL-aware behavior
 
 ### Enforcement Integrations
 
-- [ ] Implement issue `#82`: reference enforcement adapters and examples for
+- [x] Implement issue `#82`: reference enforcement adapters and examples for
   hooks, CI, and wrapper flows
 
 ### Coding-Agent Composition
 
-- [ ] Implement issue `#84`: higher-level composition between the policy runner
+- [x] Implement issue `#84`: higher-level composition between the policy runner
   and `CodingAgentAdapter`
 
 ### MCP Interoperability
 
-- [ ] Implement or explicitly defer issue `#81`: MCP-facing policy surface and
+- [x] Implement or explicitly defer issue `#81`: MCP-facing policy surface and
   rationale
 
 ## Validation Checklist
 
-- [ ] Keep `STATUS.md` aligned with shipped slices and remaining issue backlog
-- [ ] Keep follow-on GitHub issue status in sync as slices land
-- [ ] Verify new policy surfaces through targeted Rust, Python, and adapter
+- [x] Keep `STATUS.md` aligned with shipped slices and remaining issue backlog
+- [x] Keep follow-on GitHub issue status in sync as slices land
+- [x] Verify new policy surfaces through targeted Rust, Python, and adapter
   tests
-- [ ] Preserve the host-side enforcement model when adding examples or MCP
+- [x] Preserve the host-side enforcement model when adding examples or MCP
 
 ## Notes
 

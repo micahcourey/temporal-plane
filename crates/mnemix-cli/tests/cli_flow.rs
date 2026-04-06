@@ -1256,6 +1256,108 @@ fn policy_recorded_writeback_satisfies_commit_check() {
 }
 
 #[test]
+fn policy_clear_removes_recorded_action_from_workflow() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let store = temp_dir.path().join("store");
+    let _ = init_store(&store);
+    write_policy_config(&store);
+
+    let _ = run_json_ok(
+        &store,
+        &[
+            "policy",
+            "record",
+            "--workflow-key",
+            "commit-1",
+            "--action",
+            "writeback",
+        ],
+    );
+
+    let cleared = run_json_ok(
+        &store,
+        &[
+            "policy",
+            "clear",
+            "--workflow-key",
+            "commit-1",
+            "--action",
+            "writeback",
+        ],
+    );
+    assert_eq!(cleared["kind"], "status");
+    assert_eq!(cleared["data"]["status"], "cleared");
+
+    let blocked = run_json_ok(
+        &store,
+        &[
+            "policy",
+            "explain",
+            "--trigger",
+            "on_git_commit",
+            "--workflow-key",
+            "commit-1",
+            "--host",
+            "coding-agent",
+            "--path",
+            "adapters/coding_agent_adapter.py",
+        ],
+    );
+    assert_eq!(blocked["data"]["decision"], "block");
+    assert_eq!(blocked["data"]["missing_actions"][0], "writeback");
+}
+
+#[test]
+fn policy_explain_ignores_expired_workflow_evidence() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let store = temp_dir.path().join("store");
+    let _ = init_store(&store);
+    write_policy_config(&store);
+
+    fs::write(
+        store.join("policy-state.json"),
+        r#"{
+  "workflows": {
+    "commit-1": {
+      "evidence": {
+        "actions": ["writeback"],
+        "skip_reason": null
+      },
+      "created_at_unix": 1,
+      "updated_at_unix": 1
+    }
+  }
+}"#,
+    )
+    .expect("policy state should be written");
+
+    let output = run_json_ok(
+        &store,
+        &[
+            "policy",
+            "explain",
+            "--trigger",
+            "on_git_commit",
+            "--workflow-key",
+            "commit-1",
+            "--host",
+            "coding-agent",
+            "--path",
+            "adapters/coding_agent_adapter.py",
+        ],
+    );
+
+    assert_eq!(output["data"]["decision"], "block");
+    assert_eq!(output["data"]["missing_actions"][0], "writeback");
+    assert!(
+        output["data"]["reasons"][0]
+            .as_str()
+            .expect("reason should be string")
+            .contains("expired")
+    );
+}
+
+#[test]
 fn show_surfaces_missing_memory_as_json_error() {
     let temp_dir = tempdir().expect("temp dir should be created");
     let store = temp_dir.path().join("store");

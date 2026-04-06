@@ -39,12 +39,16 @@ CLI commands:
 - `mnemix policy check`
 - `mnemix policy explain`
 - `mnemix policy record`
+- `mnemix policy clear`
+- `mnemix policy cleanup`
 
 Python client methods:
 
 - `Mnemix.policy_check(...)`
 - `Mnemix.policy_explain(...)`
 - `Mnemix.policy_record(...)`
+- `Mnemix.policy_clear(...)`
+- `Mnemix.policy_cleanup(...)`
 
 ## Config files
 
@@ -66,6 +70,12 @@ The policy runner uses local store files:
 - skip reason recorded
 
 This state is host/workflow metadata, not part of the core memory schema.
+
+Each workflow entry now keeps lightweight lifecycle metadata so hosts can:
+
+- clear one workflow when it is done
+- cleanup empty or stale evidence records
+- ignore expired task/session evidence during later checks
 
 ## Rule model
 
@@ -166,13 +176,32 @@ mnemix --store .mnemix policy record \
   --action writeback
 ```
 
+If the workflow is complete and should no longer keep evidence around:
+
+```bash
+mnemix --store .mnemix policy clear \
+  --workflow-key commit-123
+```
+
+For task- or session-scoped cleanup:
+
+```bash
+mnemix --store .mnemix policy cleanup \
+  --ttl task \
+  --older-than 6h
+```
+
 The same surface is available in Python:
 
 ```python
 from pathlib import Path
 
 from mnemix import Mnemix
-from mnemix.models import PolicyCheckRequest, PolicyRecordRequest
+from mnemix.models import (
+    PolicyCheckRequest,
+    PolicyCleanupRequest,
+    PolicyRecordRequest,
+)
 
 client = Mnemix(store=Path(".mnemix"))
 
@@ -192,7 +221,69 @@ if decision.decision == "block":
             action="writeback",
         )
     )
+
+client.policy_cleanup(
+    PolicyCleanupRequest(ttl="task", older_than="6h", dry_run=True)
+)
 ```
+
+## Coding-agent composition
+
+`CodingAgentAdapter` now composes directly with the policy runner instead of
+forcing host code to stitch together raw CLI calls.
+
+Typical flow:
+
+```python
+from pathlib import Path
+
+from adapters import CodingAgentAdapter, CodingOutcome
+
+adapter = CodingAgentAdapter(store=Path(".mnemix"))
+adapter.ensure_store()
+
+task = adapter.start_task(
+    scope=adapter.repo_scope("mnemix"),
+    task_title="Implement policy lifecycle commands",
+    mode="normal",
+    workflow_key="task-001",
+    task_kind="feature",
+    paths=["crates/mnemix-cli/src/cmd/policy.rs"],
+)
+
+result = adapter.store_outcome(
+    CodingOutcome(
+        memory_id="policy-lifecycle-summary",
+        scope=adapter.repo_scope("mnemix"),
+        title="Added policy lifecycle commands",
+        summary="The CLI now supports clearing and cleanup for policy evidence.",
+        detail="`policy clear` removes workflow evidence and `policy cleanup` prunes empty or expired entries.",
+        reusable=True,
+    ),
+    workflow_key="task-001",
+)
+
+print(task.policy_decision)
+print(result.policy_recorded_actions)
+```
+
+The task context surfaces the post-recall policy decision, and durable outcome
+storage can automatically record `classification_selected` and `writeback`
+evidence for the same workflow key.
+
+## Enforcement examples
+
+Reference host-side enforcement examples live under:
+
+```text
+examples/policy-runner/
+```
+
+They cover:
+
+- a coding-agent wrapper flow
+- a local pre-commit style gate
+- a CI/PR verification script
 
 ## Relationship to adapters
 
@@ -225,12 +316,9 @@ For strict workflows, enforcement still belongs in host checkpoints such as:
 
 ## Current limitations
 
-The current implementation is intentionally small:
+The current implementation still keeps scope intentionally tight:
 
 - local file-backed config and evidence only
-- no MCP exposure yet
 - no Python helper around policy config authoring
-- no git-hook integration yet
-- no automatic evidence cleanup or TTL enforcement yet
-
-Those are planned follow-on steps, not part of the current v1 slice.
+- lifecycle cleanup uses conservative built-in task/session age defaults unless a host overrides them
+- MCP exposure is intentionally deferred until host-side workflows prove a real interoperability need

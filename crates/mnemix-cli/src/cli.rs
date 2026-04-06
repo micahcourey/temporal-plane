@@ -2,8 +2,8 @@ use std::path::PathBuf;
 
 use clap::{ArgGroup, Parser, Subcommand, ValueEnum};
 use mnemix_core::{
-    CheckpointName, DisclosureDepth, EntityName, MemoryId, PolicyAction, PolicyTrigger,
-    RetrievalMode, ScopeId, SessionId, SourceRef, TagName, ToolName,
+    CheckpointName, DisclosureDepth, EntityName, EvidenceTtl, MemoryId, PolicyAction,
+    PolicyTrigger, RetrievalMode, ScopeId, SessionId, SourceRef, TagName, ToolName,
 };
 
 use crate::output::OutputFormat;
@@ -76,6 +76,8 @@ pub(crate) enum PolicyCommand {
     Check(PolicyCheckArgs),
     Explain(PolicyCheckArgs),
     Record(PolicyRecordArgs),
+    Clear(PolicyClearArgs),
+    Cleanup(PolicyCleanupArgs),
 }
 
 #[derive(clap::Args, Debug)]
@@ -109,6 +111,27 @@ pub(crate) struct PolicyRecordArgs {
 
     #[arg(long)]
     pub(crate) reason: Option<String>,
+}
+
+#[derive(clap::Args, Debug)]
+pub(crate) struct PolicyClearArgs {
+    #[arg(long)]
+    pub(crate) workflow_key: String,
+
+    #[arg(long, value_parser = parse_policy_action)]
+    pub(crate) action: Option<PolicyAction>,
+}
+
+#[derive(clap::Args, Debug)]
+pub(crate) struct PolicyCleanupArgs {
+    #[arg(long, value_parser = parse_evidence_ttl)]
+    pub(crate) ttl: Option<EvidenceTtl>,
+
+    #[arg(long, value_parser = parse_non_empty)]
+    pub(crate) older_than: Option<String>,
+
+    #[arg(long)]
+    pub(crate) dry_run: bool,
 }
 
 #[derive(clap::Args, Debug)]
@@ -575,9 +598,14 @@ fn parse_policy_action(value: &str) -> Result<PolicyAction, String> {
     value.parse()
 }
 
+fn parse_evidence_ttl(value: &str) -> Result<EvidenceTtl, String> {
+    value.parse()
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{MetadataEntry, parse_metadata_entry};
+    use super::{MetadataEntry, parse_evidence_ttl, parse_metadata_entry};
+    use mnemix_core::EvidenceTtl;
 
     #[test]
     fn parse_metadata_entry_trims_surrounding_whitespace() {
@@ -588,5 +616,12 @@ mod tests {
                 value: "cli".to_owned(),
             })
         );
+    }
+
+    #[test]
+    fn parse_evidence_ttl_accepts_known_values() {
+        assert_eq!(parse_evidence_ttl("task"), Ok(EvidenceTtl::Task));
+        assert_eq!(parse_evidence_ttl("session"), Ok(EvidenceTtl::Session));
+        assert_eq!(parse_evidence_ttl("manual"), Ok(EvidenceTtl::Manual));
     }
 }

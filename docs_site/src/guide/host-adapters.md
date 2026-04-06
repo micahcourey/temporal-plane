@@ -78,6 +78,8 @@ Use coding-agent writeback for:
 The coding adapter also exposes:
 
 - scope helpers with `repo_scope(...)`, `workspace_scope(...)`, `session_scope(...)`, and `task_scope(...)`
+- policy helpers with `check_policy(...)`, `explain_policy(...)`, `record_policy_action(...)`, `clear_policy_workflow(...)`, and `cleanup_policy_state(...)`
+- policy-aware task start and checkpoint evidence recording when a workflow key is supplied
 - targeted search with `search_memory(...)`
 - full memory inspection with `load_memory(...)`
 - typed classification with `classify_outcome(...)`
@@ -96,6 +98,11 @@ The coding adapter also exposes:
 | `session_scope(...)` | Build a standard session scope |
 | `task_scope(...)` | Build a standard task scope |
 | `start_task(...)` | Assemble task-start context with recall, pins, and recent history |
+| `check_policy(...)` | Evaluate coding-agent policy for a trigger |
+| `explain_policy(...)` | Return the explain view for a coding-agent trigger |
+| `record_policy_action(...)` | Record coding-agent policy evidence for a workflow |
+| `clear_policy_workflow(...)` | Clear one workflow's policy evidence |
+| `cleanup_policy_state(...)` | Cleanup empty or expired coding-agent policy evidence |
 | `search_memory(...)` | Run targeted search during implementation work |
 | `load_memory(...)` | Inspect one memory in full detail |
 | `list_pins(...)` | View pinned memory for the current repo or scope |

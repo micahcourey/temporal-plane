@@ -6,7 +6,15 @@ import re
 from dataclasses import dataclass, field
 from typing import Literal
 
-from mnemix.models import OptimizeRequest, RestoreRequest
+from mnemix.models import (
+    OptimizeRequest,
+    PolicyCheckRequest,
+    PolicyCleanupRequest,
+    PolicyClearRequest,
+    PolicyDecisionResult,
+    PolicyRecordRequest,
+    RestoreRequest,
+)
 
 from ._adapter_base import BaseAdapter, ContextBundle
 
@@ -24,6 +32,9 @@ class CodingTaskContext:
     recent_history: list
     prompt_preamble: str
     mode: TaskMode
+    workflow_key: str | None = None
+    policy_decision: PolicyDecisionResult | None = None
+    policy_recorded_actions: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -72,6 +83,7 @@ class StoredOutcomeResult:
     stored: bool
     classification: OutcomeClassification
     memory: object | None = None
+    policy_recorded_actions: list[str] = field(default_factory=list)
 
 
 class CodingAgentAdapter(BaseAdapter):
@@ -102,6 +114,9 @@ class CodingAgentAdapter(BaseAdapter):
         recall_limit: int | None = None,
         pin_limit: int = 10,
         history_limit: int = 5,
+        workflow_key: str | None = None,
+        task_kind: str | None = None,
+        paths: list[str] | None = None,
     ) -> CodingTaskContext:
         disclosure_depth, default_limit = self._task_mode_config(mode)
         recall = self._context_bundle(
@@ -113,6 +128,18 @@ class CodingAgentAdapter(BaseAdapter):
         )
         pins = self.list_pins(scope=scope, limit=pin_limit)
         recent_history = self.review_recent_memory(scope=scope, limit=history_limit)
+        policy_recorded_actions: list[str] = []
+        policy_decision = None
+        if workflow_key is not None:
+            self.record_policy_action(workflow_key=workflow_key, action="recall")
+            policy_recorded_actions.append("recall")
+            policy_decision = self.explain_policy(
+                trigger="on_task_start",
+                workflow_key=workflow_key,
+                scope=scope,
+                task_kind=task_kind,
+                paths=paths or [],
+            )
         return CodingTaskContext(
             recall=recall,
             pins=pins,
@@ -123,6 +150,9 @@ class CodingAgentAdapter(BaseAdapter):
                 recent_history=recent_history,
             ),
             mode=mode,
+            workflow_key=workflow_key,
+            policy_decision=policy_decision,
+            policy_recorded_actions=policy_recorded_actions,
         )
 
     def search_memory(
@@ -158,11 +188,15 @@ class CodingAgentAdapter(BaseAdapter):
         *,
         task_id: str,
         description: str | None = None,
+        workflow_key: str | None = None,
     ):
-        return self.create_checkpoint(
+        checkpoint = self.create_checkpoint(
             f"task-{task_id}",
             description=description or "Checkpoint before risky coding-agent change",
         )
+        if workflow_key is not None:
+            self.record_policy_action(workflow_key=workflow_key, action="checkpoint")
+        return checkpoint
 
     def list_versions(self, *, limit: int = 20):
         return self._client.versions(limit=limit)
@@ -249,7 +283,92 @@ class CodingAgentAdapter(BaseAdapter):
             reason="Outcome did not indicate durable signal worth storing.",
         )
 
-    def store_outcome(self, outcome: CodingOutcome) -> StoredOutcomeResult:
+    def check_policy(
+        self,
+        *,
+        trigger: str,
+        workflow_key: str | None = None,
+        task_kind: str | None = None,
+        scope: str | None = None,
+        paths: list[str] | None = None,
+    ) -> PolicyDecisionResult:
+        return self._client.policy_check(
+            PolicyCheckRequest(
+                trigger=trigger,
+                workflow_key=workflow_key,
+                host="coding-agent",
+                task_kind=task_kind,
+                scope=scope,
+                paths=paths or [],
+            )
+        )
+
+    def explain_policy(
+        self,
+        *,
+        trigger: str,
+        workflow_key: str | None = None,
+        task_kind: str | None = None,
+        scope: str | None = None,
+        paths: list[str] | None = None,
+    ) -> PolicyDecisionResult:
+        return self._client.policy_explain(
+            PolicyCheckRequest(
+                trigger=trigger,
+                workflow_key=workflow_key,
+                host="coding-agent",
+                task_kind=task_kind,
+                scope=scope,
+                paths=paths or [],
+            )
+        )
+
+    def record_policy_action(
+        self,
+        *,
+        workflow_key: str,
+        action: str,
+        reason: str | None = None,
+    ):
+        return self._client.policy_record(
+            PolicyRecordRequest(
+                workflow_key=workflow_key,
+                action=action,
+                reason=reason,
+            )
+        )
+
+    def clear_policy_workflow(
+        self,
+        *,
+        workflow_key: str,
+        action: str | None = None,
+    ):
+        return self._client.policy_clear(
+            PolicyClearRequest(workflow_key=workflow_key, action=action)
+        )
+
+    def cleanup_policy_state(
+        self,
+        *,
+        ttl: str | None = None,
+        older_than: str | None = None,
+        dry_run: bool = False,
+    ):
+        return self._client.policy_cleanup(
+            PolicyCleanupRequest(
+                ttl=ttl,
+                older_than=older_than,
+                dry_run=dry_run,
+            )
+        )
+
+    def store_outcome(
+        self,
+        outcome: CodingOutcome,
+        *,
+        workflow_key: str | None = None,
+    ) -> StoredOutcomeResult:
         classification = self.classify_outcome(outcome)
         if classification.kind == "skip":
             return StoredOutcomeResult(stored=False, classification=classification)
@@ -271,10 +390,19 @@ class CodingAgentAdapter(BaseAdapter):
             source_ref=outcome.source_ref,
             metadata=outcome.metadata,
         )
+        policy_recorded_actions: list[str] = []
+        if workflow_key is not None:
+            self.record_policy_action(
+                workflow_key=workflow_key,
+                action="classification_selected",
+            )
+            self.record_policy_action(workflow_key=workflow_key, action="writeback")
+            policy_recorded_actions = ["classification_selected", "writeback"]
         return StoredOutcomeResult(
             stored=True,
             classification=classification,
             memory=memory,
+            policy_recorded_actions=policy_recorded_actions,
         )
 
     def store_decision(

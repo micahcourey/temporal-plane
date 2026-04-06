@@ -42,8 +42,11 @@ from .models import (
     OptimizeRetentionResult,
     PolicyAction,
     PolicyCheckRequest,
+    PolicyCleanupRequest,
+    PolicyClearRequest,
     PolicyDecisionKind,
     PolicyDecisionResult,
+    EvidenceTtl,
     PolicyMode,
     PolicyRecordRequest,
     PolicyRuleEvaluation,
@@ -76,6 +79,8 @@ __all__ = [
     "RestoreRequest",
     "OptimizeRequest",
     "PolicyCheckRequest",
+    "PolicyClearRequest",
+    "PolicyCleanupRequest",
     "PolicyRecordRequest",
     # response models
     "MemorySummary",
@@ -99,6 +104,7 @@ __all__ = [
     "PolicyMode",
     "PolicyDecisionKind",
     "ScopeStrategy",
+    "EvidenceTtl",
     # version
     "__version__",
 ]

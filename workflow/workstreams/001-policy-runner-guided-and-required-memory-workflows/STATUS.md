@@ -1,7 +1,7 @@
 ---
-status: open
-summary: Policy runner planning is complete and the remaining implementation backlog is tracked under issues #81, #82, #83, and #84.
-updated: 2026-03-31
+status: completed
+summary: Policy runner lifecycle commands, enforcement examples, and CodingAgentAdapter composition are now shipped, and MCP is explicitly deferred until a concrete interoperability need appears.
+updated: 2026-04-05
 prs:
   - 66
   - 79
@@ -20,12 +20,17 @@ implementation slices already landed:
   closed after PR `#66`
 - `#76` shipped the initial policy runner surface and was closed after PR `#79`
 
-The remaining active backlog for this workstream is:
+The final follow-on slices are now represented in the repo:
 
-- `#81` evaluate and expose policy runner via MCP
-- `#82` add policy runner enforcement adapters and examples
-- `#83` add policy runner state lifecycle commands
-- `#84` compose policy runner with `CodingAgentAdapter`
+- `#82` shipped reference enforcement examples for local hooks, wrappers, and
+  CI/PR policy checks
+- `#83` shipped `policy clear` and `policy cleanup`, lifecycle metadata in
+  `policy-state.json`, and TTL-aware task/session evidence handling
+- `#84` composed the policy runner with `CodingAgentAdapter` task start,
+  checkpoint, and writeback flows
+- `#81` is explicitly deferred for now because host-side enforcement paths are
+  sufficient and MCP does not yet add enough interoperability value to justify
+  another surface area
 
 ## References
 
