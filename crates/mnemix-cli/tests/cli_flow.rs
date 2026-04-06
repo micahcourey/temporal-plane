@@ -179,6 +179,9 @@ fn start_mock_embeddings_server() -> (String, thread::JoinHandle<()>) {
                 }
                 Err(error) => panic!("incoming stream should be accepted: {error}"),
             };
+            stream
+                .set_nonblocking(false)
+                .expect("accepted stream should switch back to blocking mode");
             let mut reader = BufReader::new(stream.try_clone().expect("clone stream"));
             let mut request_line = String::new();
             reader

@@ -114,8 +114,9 @@ fn check(
         .workflow_key
         .as_ref()
         .and_then(|key| state.workflows.get(key))
-        .map(|entry| resolve_evidence(entry, config.defaults.evidence_ttl))
-        .unwrap_or((None, None));
+        .map_or((None, None), |entry| {
+            resolve_evidence(entry, config.defaults.evidence_ttl)
+        });
     let decision = evaluate_policy(&config, &context, evidence.as_ref());
     let mut decision = with_missing_config_reason(&config, decision);
     if let Some(reason) = lifecycle_reason {
