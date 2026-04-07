@@ -59,6 +59,7 @@ PolicyAction = Literal[
 PolicyMode = Literal["guided", "required", "required_with_skip_reason"]
 PolicyDecisionKind = Literal["allow", "allow_with_recommendation", "require_action", "block"]
 ScopeStrategy = Literal["repo", "workspace", "session", "task"]
+EvidenceTtl = Literal["task", "session", "manual"]
 
 
 # ---------------------------------------------------------------------------
@@ -165,6 +166,23 @@ class PolicyRecordRequest:
     def __post_init__(self) -> None:
         if self.action == "skip_reason" and (self.reason is None or not self.reason.strip()):
             raise ValueError("Provide 'reason' when recording action 'skip_reason'.")
+
+
+@dataclass(frozen=True)
+class PolicyClearRequest:
+    """Parameters for the ``policy clear`` command."""
+
+    workflow_key: str
+    action: PolicyAction | None = None
+
+
+@dataclass(frozen=True)
+class PolicyCleanupRequest:
+    """Parameters for the ``policy cleanup`` command."""
+
+    ttl: EvidenceTtl | None = None
+    older_than: str | None = None
+    dry_run: bool = False
 
 
 # ---------------------------------------------------------------------------

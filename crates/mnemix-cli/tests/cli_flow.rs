@@ -179,6 +179,9 @@ fn start_mock_embeddings_server() -> (String, thread::JoinHandle<()>) {
                 }
                 Err(error) => panic!("incoming stream should be accepted: {error}"),
             };
+            stream
+                .set_nonblocking(false)
+                .expect("accepted stream should switch back to blocking mode");
             let mut reader = BufReader::new(stream.try_clone().expect("clone stream"));
             let mut request_line = String::new();
             reader
@@ -1253,6 +1256,309 @@ fn policy_recorded_writeback_satisfies_commit_check() {
     assert_eq!(satisfied["data"]["action"], "explain");
     assert_eq!(satisfied["data"]["decision"], "allow");
     assert_eq!(satisfied["data"]["matched_rules"][0]["satisfied"], true);
+}
+
+#[test]
+fn policy_explain_preserves_legacy_state_entries() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let store = temp_dir.path().join("store");
+    let _ = init_store(&store);
+    write_policy_config(&store);
+
+    fs::write(
+        store.join("policy-state.json"),
+        r#"{
+  "workflows": {
+    "commit-1": {
+      "actions": ["writeback"],
+      "skip_reason": null
+    }
+  }
+}"#,
+    )
+    .expect("legacy policy state should be written");
+
+    let explained = run_json_ok(
+        &store,
+        &[
+            "policy",
+            "explain",
+            "--trigger",
+            "on_git_commit",
+            "--workflow-key",
+            "commit-1",
+            "--host",
+            "coding-agent",
+            "--path",
+            "adapters/coding_agent_adapter.py",
+        ],
+    );
+    assert_eq!(explained["data"]["decision"], "allow");
+    assert_eq!(explained["data"]["matched_rules"][0]["satisfied"], true);
+}
+
+#[test]
+fn policy_clear_removes_recorded_action_from_workflow() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let store = temp_dir.path().join("store");
+    let _ = init_store(&store);
+    write_policy_config(&store);
+
+    let _ = run_json_ok(
+        &store,
+        &[
+            "policy",
+            "record",
+            "--workflow-key",
+            "commit-1",
+            "--action",
+            "writeback",
+        ],
+    );
+
+    let cleared = run_json_ok(
+        &store,
+        &[
+            "policy",
+            "clear",
+            "--workflow-key",
+            "commit-1",
+            "--action",
+            "writeback",
+        ],
+    );
+    assert_eq!(cleared["kind"], "status");
+    assert_eq!(cleared["data"]["status"], "cleared");
+
+    let blocked = run_json_ok(
+        &store,
+        &[
+            "policy",
+            "explain",
+            "--trigger",
+            "on_git_commit",
+            "--workflow-key",
+            "commit-1",
+            "--host",
+            "coding-agent",
+            "--path",
+            "adapters/coding_agent_adapter.py",
+        ],
+    );
+    assert_eq!(blocked["data"]["decision"], "block");
+    assert_eq!(blocked["data"]["missing_actions"][0], "writeback");
+}
+
+#[test]
+fn policy_clear_noop_does_not_refresh_unrelated_evidence() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let store = temp_dir.path().join("store");
+    let _ = init_store(&store);
+    write_policy_config(&store);
+
+    let original = r#"{
+  "workflows": {
+    "commit-1": {
+      "evidence": {
+        "actions": ["recall"],
+        "skip_reason": null
+      },
+      "evidence_ttl": "task",
+      "created_at_unix": 10,
+      "updated_at_unix": 20
+    }
+  }
+}"#;
+    fs::write(store.join("policy-state.json"), original).expect("policy state should be written");
+
+    let cleared = run_json_ok(
+        &store,
+        &[
+            "policy",
+            "clear",
+            "--workflow-key",
+            "commit-1",
+            "--action",
+            "writeback",
+        ],
+    );
+    assert_eq!(cleared["data"]["status"], "unchanged");
+
+    let after = fs::read_to_string(store.join("policy-state.json")).expect("policy state");
+    assert_eq!(after, original);
+}
+
+#[test]
+fn policy_explain_ignores_expired_workflow_evidence() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let store = temp_dir.path().join("store");
+    let _ = init_store(&store);
+    write_policy_config(&store);
+
+    fs::write(
+        store.join("policy-state.json"),
+        r#"{
+  "workflows": {
+    "commit-1": {
+      "evidence": {
+        "actions": ["writeback"],
+        "skip_reason": null
+      },
+      "created_at_unix": 1,
+      "updated_at_unix": 1
+    }
+  }
+}"#,
+    )
+    .expect("policy state should be written");
+
+    let output = run_json_ok(
+        &store,
+        &[
+            "policy",
+            "explain",
+            "--trigger",
+            "on_git_commit",
+            "--workflow-key",
+            "commit-1",
+            "--host",
+            "coding-agent",
+            "--path",
+            "adapters/coding_agent_adapter.py",
+        ],
+    );
+
+    assert_eq!(output["data"]["decision"], "block");
+    assert_eq!(output["data"]["missing_actions"][0], "writeback");
+    assert!(
+        output["data"]["reasons"][0]
+            .as_str()
+            .expect("reason should be string")
+            .contains("expired")
+    );
+}
+
+#[test]
+fn policy_explain_uses_stored_ttl_instead_of_current_default() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let store = temp_dir.path().join("store");
+    let _ = init_store(&store);
+
+    fs::write(
+        store.join("policy.toml"),
+        r#"
+version = 1
+
+[defaults]
+scope_strategy = "repo"
+evidence_ttl = "task"
+
+[[rules]]
+id = "commit-writeback"
+trigger = "on_git_commit"
+mode = "required"
+requires = ["writeback"]
+allow_skip = false
+on_unsatisfied = "block"
+
+[rules.when]
+host = ["coding-agent"]
+paths_any = ["adapters/**"]
+"#,
+    )
+    .expect("policy config should be written");
+
+    fs::write(
+        store.join("policy-state.json"),
+        r#"{
+  "workflows": {
+    "commit-1": {
+      "evidence": {
+        "actions": ["writeback"],
+        "skip_reason": null
+      },
+      "evidence_ttl": "manual",
+      "created_at_unix": 1,
+      "updated_at_unix": 1
+    }
+  }
+}"#,
+    )
+    .expect("policy state should be written");
+
+    let output = run_json_ok(
+        &store,
+        &[
+            "policy",
+            "explain",
+            "--trigger",
+            "on_git_commit",
+            "--workflow-key",
+            "commit-1",
+            "--host",
+            "coding-agent",
+            "--path",
+            "adapters/coding_agent_adapter.py",
+        ],
+    );
+
+    assert_eq!(output["data"]["decision"], "allow");
+    assert_eq!(output["data"]["matched_rules"][0]["satisfied"], true);
+}
+
+#[test]
+fn policy_cleanup_filters_by_stored_ttl() {
+    let temp_dir = tempdir().expect("temp dir should be created");
+    let store = temp_dir.path().join("store");
+    let _ = init_store(&store);
+    write_policy_config(&store);
+
+    fs::write(
+        store.join("policy-state.json"),
+        r#"{
+  "workflows": {
+    "manual-workflow": {
+      "evidence": {
+        "actions": ["writeback"],
+        "skip_reason": null
+      },
+      "evidence_ttl": "manual",
+      "created_at_unix": 1,
+      "updated_at_unix": 1
+    }
+  }
+}"#,
+    )
+    .expect("policy state should be written");
+
+    let cleaned = run_json_ok(
+        &store,
+        &["policy", "cleanup", "--ttl", "task", "--older-than", "6h"],
+    );
+    assert_eq!(cleaned["data"]["status"], "cleaned");
+    assert!(
+        cleaned["data"]["message"]
+            .as_str()
+            .expect("message")
+            .contains("stored `task` entries")
+    );
+
+    let explained = run_json_ok(
+        &store,
+        &[
+            "policy",
+            "explain",
+            "--trigger",
+            "on_git_commit",
+            "--workflow-key",
+            "manual-workflow",
+            "--host",
+            "coding-agent",
+            "--path",
+            "adapters/coding_agent_adapter.py",
+        ],
+    );
+    assert_eq!(explained["data"]["decision"], "allow");
 }
 
 #[test]

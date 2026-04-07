@@ -1,7 +1,7 @@
 ---
-status: open
-summary: "Implement the first enforcement-oriented policy-runner integrations."
-updated: "2026-03-21"
+status: completed
+summary: "Shipped reference policy-runner enforcement examples for wrappers, local hooks, and CI/PR flows."
+updated: "2026-04-05"
 ---
 
 # Patch: Add policy runner enforcement adapters and examples
@@ -16,22 +16,25 @@ This patch preserves legacy Dex history after the repository moved to repo-nativ
 
 ## Scope
 
-- Preserve the original Dex task details for `wjqmxdqh`.
-- Keep the tracked status aligned with the final Dex state: `open`.
-- Avoid reinterpreting the historical task beyond the recorded Dex description and outcome.
+- Add a reference coding-agent wrapper flow
+- Add a local pre-commit style enforcement example
+- Add a CI/PR policy verification example
+- Keep enforcement host-side instead of moving it into storage or MCP
 
 ## Implementation Notes
 
-- Imported from legacy Dex tracking during the 2026-03-30 workflow migration.
-- Original Dex task ID: `wjqmxdqh`
-- Created: 2026-03-21
-- Started: Not recorded
-- Completed: Not recorded
+- Added `examples/policy-runner/README.md`
+- Added `examples/policy-runner/coding_agent_wrapper.py`
+- Added `examples/policy-runner/pre_commit_policy.sh`
+- Added `examples/policy-runner/ci_policy_check.sh`
+- Updated the policy-runner and host-adapter guides to point at the new
+  enforcement examples
 
 ## Validation
 
-- This task was still open in Dex when the history was imported.
-- Migration check: imported into `workflow/patches/` for repo-native tracking.
+- Verified policy-related Python and adapter tests through the repo virtualenv
+- Kept the example flows host-side and based on `policy check`, `policy
+  explain`, and `policy record`
 
 ## References
 

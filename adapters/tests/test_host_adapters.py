@@ -112,7 +112,6 @@ _STATS = StoreStats(
     latest_checkpoint="ci-123",
 )
 
-
 @pytest.fixture()
 def mock_client() -> MagicMock:
     client = MagicMock()
@@ -136,6 +135,11 @@ def mock_client() -> MagicMock:
     client.versions.return_value = [_VERSION]
     client.restore.return_value = _RESTORE
     client.optimize.return_value = _OPTIMIZE
+    client.policy_check.return_value = MagicMock(decision="allow")
+    client.policy_explain.return_value = MagicMock(decision="allow")
+    client.policy_record.return_value = MagicMock(status="recorded")
+    client.policy_clear.return_value = MagicMock(status="cleared")
+    client.policy_cleanup.return_value = MagicMock(status="cleaned")
     return client
 
 
@@ -164,6 +168,29 @@ def test_coding_agent_start_task_uses_task_title_for_recall(
     assert "coding task" in bundle.prompt_preamble
     mock_client.pins.assert_called_once_with(scope="repo:mnemix", limit=10)
     mock_client.history.assert_called_once_with(scope="repo:mnemix", limit=5)
+
+
+def test_coding_agent_start_task_records_policy_recall_when_workflow_key_is_given(
+    mock_client: MagicMock,
+) -> None:
+    adapter = _build(CodingAgentAdapter, mock_client)
+
+    bundle = adapter.start_task(
+        scope="repo:mnemix",
+        task_title="Implement policy lifecycle",
+        workflow_key="wf-1",
+        task_kind="feature",
+        paths=["adapters/coding_agent_adapter.py"],
+    )
+
+    assert bundle.workflow_key == "wf-1"
+    assert bundle.policy_recorded_actions == ["recall"]
+    mock_client.policy_record.assert_called_once()
+    policy_req = mock_client.policy_explain.call_args[0][0]
+    assert policy_req.trigger == "on_task_start"
+    assert policy_req.workflow_key == "wf-1"
+    assert policy_req.host == "coding-agent"
+    assert policy_req.task_kind == "feature"
 
 
 def test_coding_agent_store_decision_uses_decision_kind(
@@ -226,6 +253,18 @@ def test_coding_agent_exposes_checkpoint_restore_and_maintenance(
     mock_client.versions.assert_called_once_with(limit=5)
     mock_client.export.assert_called_once_with("/tmp/exported-store")
     mock_client.import_store.assert_called_once_with("/tmp/source-store")
+
+
+def test_coding_agent_checkpoint_records_policy_evidence(
+    mock_client: MagicMock,
+) -> None:
+    adapter = _build(CodingAgentAdapter, mock_client)
+
+    adapter.checkpoint_before_risky_change(task_id="migration-1", workflow_key="wf-1")
+
+    policy_req = mock_client.policy_record.call_args[0][0]
+    assert policy_req.workflow_key == "wf-1"
+    assert policy_req.action == "checkpoint"
 
 
 def test_coding_agent_classifies_low_signal_outcome_as_skip(
@@ -302,6 +341,31 @@ def test_coding_agent_store_outcome_uses_inferred_kind_and_metadata(
     assert req.source_session_id == "session:abc"
     assert req.source_ref == "docs/mnemix-roadmap.md"
     assert req.metadata["files_touched"] == "adapters/coding_agent_adapter.py"
+
+
+def test_coding_agent_store_outcome_records_policy_writeback(
+    mock_client: MagicMock,
+) -> None:
+    adapter = _build(CodingAgentAdapter, mock_client)
+
+    result = adapter.store_outcome(
+        CodingOutcome(
+            memory_id="memory:procedure-3",
+            scope="repo:mnemix",
+            title="Store durable procedure",
+            summary="Reusable workflow.",
+            detail="Record the result after classification.",
+            reusable=True,
+        ),
+        workflow_key="wf-1",
+    )
+
+    assert result.policy_recorded_actions == ["classification_selected", "writeback"]
+    assert mock_client.policy_record.call_count == 2
+    first_req = mock_client.policy_record.call_args_list[0][0][0]
+    second_req = mock_client.policy_record.call_args_list[1][0][0]
+    assert first_req.action == "classification_selected"
+    assert second_req.action == "writeback"
 
 
 def test_coding_agent_explicit_skip_hint_short_circuits_writeback(

@@ -18,6 +18,8 @@ from mnemix.models import (
     CheckpointRequest,
     OptimizeRequest,
     PolicyCheckRequest,
+    PolicyCleanupRequest,
+    PolicyClearRequest,
     PolicyRecordRequest,
     RecallRequest,
     RememberRequest,
@@ -475,6 +477,49 @@ class TestPolicy:
         assert result.status == "recorded"
         args = mock_run.call_args[0][2]
         assert args == ["record", "--workflow-key", "wf-1", "--action", "writeback"]
+
+    def test_policy_clear_returns_status(self, tp: Mnemix) -> None:
+        with patch("mnemix._runner.run") as mock_run:
+            mock_run.return_value = {
+                "command": "policy",
+                "status": "cleared",
+                "message": "Cleared `writeback` for workflow `wf-1`",
+                "path": "/tmp/test-store",
+                "schema_version": None,
+            }
+            result = tp.policy_clear(
+                PolicyClearRequest(workflow_key="wf-1", action="writeback")
+            )
+        assert result.status == "cleared"
+        assert mock_run.call_args[0][2] == [
+            "clear",
+            "--workflow-key",
+            "wf-1",
+            "--action",
+            "writeback",
+        ]
+
+    def test_policy_cleanup_accepts_optional_args(self, tp: Mnemix) -> None:
+        with patch("mnemix._runner.run") as mock_run:
+            mock_run.return_value = {
+                "command": "policy",
+                "status": "dry_run",
+                "message": "Removed 1 workflow evidence entries using `task` TTL",
+                "path": "/tmp/test-store",
+                "schema_version": None,
+            }
+            result = tp.policy_cleanup(
+                PolicyCleanupRequest(ttl="task", older_than="2h", dry_run=True)
+            )
+        assert result.status == "dry_run"
+        assert mock_run.call_args[0][2] == [
+            "cleanup",
+            "--ttl",
+            "task",
+            "--older-than",
+            "2h",
+            "--dry-run",
+        ]
 
 
 # ---------------------------------------------------------------------------

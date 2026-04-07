@@ -22,6 +22,8 @@ the primary host workflow. It now covers:
 - scope helpers for repo, workspace, session, and task namespaces
 - task-start recall modes (`quick`, `normal`, `deep`)
 - pinned-memory and recent-history context assembly
+- policy check, explain, record, clear, and cleanup helpers
+- policy-aware task start, checkpoint, and writeback evidence recording
 - targeted search and memory inspection
 - typed outcome classification with an explicit skip path
 - `store_outcome(...)` for policy-driven writeback

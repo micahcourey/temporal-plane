@@ -12,6 +12,8 @@ from mnemix.models import (
     OptimizeRequest,
     OptimizeResult,
     PolicyCheckRequest,
+    PolicyCleanupRequest,
+    PolicyClearRequest,
     PolicyDecisionResult,
     PolicyRecordRequest,
     RecallEntry,
@@ -154,6 +156,21 @@ class TestPolicyRecordRequest:
     def test_skip_reason_requires_reason(self) -> None:
         with pytest.raises(ValueError, match="Provide 'reason'"):
             PolicyRecordRequest(workflow_key="wf-1", action="skip_reason")
+
+
+class TestPolicyClearRequest:
+    def test_defaults(self) -> None:
+        req = PolicyClearRequest(workflow_key="wf-1")
+        assert req.workflow_key == "wf-1"
+        assert req.action is None
+
+
+class TestPolicyCleanupRequest:
+    def test_defaults(self) -> None:
+        req = PolicyCleanupRequest()
+        assert req.ttl is None
+        assert req.older_than is None
+        assert req.dry_run is False
 
 
 # ---------------------------------------------------------------------------

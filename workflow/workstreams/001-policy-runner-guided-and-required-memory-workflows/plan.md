@@ -28,8 +28,8 @@ it.
 - [x] CLI implementation
 - [x] Python wrapper
 - [x] Adapter surface
-- [ ] Hooks and reference enforcement examples
-- [ ] MCP interoperability layer
+- [x] Hooks and reference enforcement examples
+- [x] MCP interoperability layer evaluation is documented as deferred
 
 ## Technical Design
 
@@ -72,23 +72,24 @@ docs/ or workflow/workstreams/001-.../            # canonical explanation of the
 
 ### Slice 2: State Lifecycle
 
-- Issue `#83`: add evidence cleanup, clear behavior, TTL handling, and related
-  CLI/Python surfaces
+- Completed: issue `#83` added evidence cleanup, clear behavior, TTL handling,
+  and related CLI/Python surfaces
 
 ### Slice 3: Enforcement Examples
 
-- Issue `#82`: add reference git-hook, wrapper CLI, and CI/PR enforcement
-  examples
+- Completed: issue `#82` added reference git-hook, wrapper CLI, and CI/PR
+  enforcement examples
 
 ### Slice 4: Adapter Composition
 
-- Issue `#84`: compose policy checks with `CodingAgentAdapter` start, writeback,
-  and checkpoint flows
+- Completed: issue `#84` composes policy checks with `CodingAgentAdapter`
+  start, writeback, and checkpoint flows
 
 ### Slice 5: MCP Evaluation
 
-- Issue `#81`: evaluate whether MCP adds value as an interoperability surface
-  and either implement or explicitly defer it
+- Completed as a defer decision: issue `#81` was evaluated and explicitly
+  deferred until host-side enforcement patterns demonstrate a concrete need for
+  an additional transport surface
 
 ## Risks
 

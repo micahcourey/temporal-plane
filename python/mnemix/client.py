@@ -41,6 +41,8 @@ from .models import (
     OptimizeRequest,
     OptimizeResult,
     PolicyCheckRequest,
+    PolicyCleanupRequest,
+    PolicyClearRequest,
     PolicyDecisionResult,
     PolicyRecordRequest,
     RecallRequest,
@@ -344,6 +346,28 @@ class Mnemix:
         ]
         if request.reason is not None:
             args += ["--reason", request.reason]
+        data = self._run("policy", args)
+        return StatusResult.from_dict(data)
+
+    def policy_clear(self, request: PolicyClearRequest) -> StatusResult:
+        """Clear policy evidence for one workflow key."""
+        args = ["clear", "--workflow-key", request.workflow_key]
+        if request.action is not None:
+            args += ["--action", request.action]
+        data = self._run("policy", args)
+        return StatusResult.from_dict(data)
+
+    def policy_cleanup(self, request: PolicyCleanupRequest | None = None) -> StatusResult:
+        """Cleanup empty or expired policy evidence entries."""
+        if request is None:
+            request = PolicyCleanupRequest()
+        args = ["cleanup"]
+        if request.ttl is not None:
+            args += ["--ttl", request.ttl]
+        if request.older_than is not None:
+            args += ["--older-than", request.older_than]
+        if request.dry_run:
+            args.append("--dry-run")
         data = self._run("policy", args)
         return StatusResult.from_dict(data)
 
